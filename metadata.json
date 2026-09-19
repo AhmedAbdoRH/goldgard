@@ -1,0 +1,6 @@
+{
+  "name": "حارس الذهب",
+  "description": "اعرف السعر العادل المفروض قبل ما تشتري أو تبيع الذهب في مصر لحظياً بدقة وبسهولة مع كشف المصنعية وحساب الهالك",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
