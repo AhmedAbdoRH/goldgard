@@ -252,7 +252,7 @@ fun DateConnectionBar(
     modifier: Modifier = Modifier
 ) {
     val (statusLabel, statusColor) = when {
-        !isOnline -> Pair("غير متاح", GoldTheme.colors.danger)
+        !isOnline || status == "connection_lost" -> Pair("انقطع الاتصال", GoldTheme.colors.danger)
         status == "live" -> Pair("متصل", GoldTheme.colors.success)
         status == "stale" || status == "market_closed" -> Pair("السوق مغلق", GoldTheme.colors.warning)
         status == "cached" || status == "cached_failed" -> Pair(if (lastUpdatedText.isNotEmpty()) "آخر تحديث: $lastUpdatedText" else "قديم", GoldTheme.colors.warning)
@@ -435,7 +435,7 @@ fun MainActionCards(
                 Text(text = "🕌", fontSize = 18.sp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "زكاة الذهب فقط لا غير",
+                    text = "زكاة الذهب",
                     fontSize = 14.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = zakatTextColor

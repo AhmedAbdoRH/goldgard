@@ -480,9 +480,12 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // بطاقة معايرة السوق المصري (Market Calibration)
+            // بطاقة معايرة جولد بيليون (Gold Bullion Hybrid Calibration)
             item {
-                var calibrationPriceInput by remember { mutableStateOf("") }
+                var goldBullion21BuyInput by remember { mutableStateOf("") }
+                var saghaDollarInput by remember(marketAdminSettings.saghaUsdRate) {
+                    mutableStateOf(marketAdminSettings.saghaUsdRate.toString())
+                }
 
                 Card(
                     modifier = Modifier
@@ -490,77 +493,170 @@ fun SettingsScreen(
                         .padding(horizontal = 16.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141C2E)),
-                    border = BorderStroke(1.dp, GoldDark.copy(alpha = 0.5f))
+                    border = BorderStroke(1.2.dp, GoldPrimary)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "🎯", fontSize = 16.sp)
+                            Text(text = "🎯", fontSize = 20.sp)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "معايرة تسعير السوق المصري (Calibration)",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldLight
-                            )
-                        }
-
-                        Text(
-                            text = "معامل البيع الحالي: ${marketAdminSettings.marketSellFactor} | معامل الشراء الحالي: ${marketAdminSettings.marketBuyFactor}",
-                            fontSize = 11.5.sp,
-                            color = Color(0xFFCBD5E1)
-                        )
-
-                        Text(
-                            text = "إذا لاحظت فرقاً بين سعر الصاغة المحلي وسعر التطبيق، أدخل السعر الفعلي لعيار 21 لإعادة ضبط المعاملات تلقائياً:",
-                            fontSize = 11.sp,
-                            color = Color(0xFF94A3B8),
-                            lineHeight = 15.sp
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = calibrationPriceInput,
-                                onValueChange = { calibrationPriceInput = it.filter { c -> c.isDigit() || c == '.' } },
-                                modifier = Modifier.weight(1f),
-                                label = { Text("سعر عيار 21 الفعلي الآن") },
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = GoldAccent,
-                                    unfocusedBorderColor = Color(0xFF26334A),
-                                    focusedLabelColor = GoldLight,
-                                    unfocusedLabelColor = Color(0xFF94A3B8),
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
-                            )
-
-                            Button(
-                                onClick = {
-                                    val price = calibrationPriceInput.toDoubleOrNull() ?: 0.0
-                                    if (price > 0) {
-                                        viewModel.calibrateMarket(price)
-                                        calibrationPriceInput = ""
-                                    }
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
-                            ) {
+                            Column {
                                 Text(
-                                    text = "معايرة ⚖️",
-                                    fontSize = 12.sp,
+                                    text = "معايرة دقة التسعير",
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF0F172A)
+                                    color = GoldLight
+                                )
+                                Text(
+                                    text = "مطابقة وضبط الأسعار اللحظية لعيار 21 مع سوق الصاغة بدقة تامة",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF94A3B8)
                                 )
                             }
+                        }
+
+                        HorizontalDivider(color = DarkBorderGold.copy(alpha = 0.5f), thickness = 0.8.dp)
+
+                        // 1. حقل إدخال: سعر شراء عيار 21 الفعلي في السوق
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "سعر شراء عيار 21 الفعلي في السوق (للمعايرة)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = goldBullion21BuyInput,
+                                    onValueChange = { input ->
+                                        goldBullion21BuyInput = input.filter { it.isDigit() || it == '.' }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    placeholder = { Text("مثال: 6385", color = Color(0xFF64748B)) },
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = GoldAccent,
+                                        unfocusedBorderColor = Color(0xFF26334A),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedContainerColor = Color(0xFF0F172A),
+                                        unfocusedContainerColor = Color(0xFF0F172A)
+                                    )
+                                )
+
+                                Button(
+                                    onClick = {
+                                        val entered = goldBullion21BuyInput.toDoubleOrNull() ?: 0.0
+                                        if (entered > 500.0) {
+                                            viewModel.calibrateWithGoldBullion21(entered)
+                                            goldBullion21BuyInput = ""
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
+                                ) {
+                                    Text(
+                                        text = "معايرة الآن ⚖️",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F172A)
+                                    )
+                                }
+                            }
+
+                            // يظهر أسفل الحقل: تمت المعايرة: K = [القيمة] بتاريخ [الوقت]
+                            val calibKStr = String.format(Locale.US, "%.4f", marketAdminSettings.calibrationK)
+                            val calibDateStr = if (marketAdminSettings.lastCalibrationDate.isNotBlank()) marketAdminSettings.lastCalibrationDate else "افتراضي"
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF0F172A))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "تمت المعايرة: K = $calibKStr بتاريخ $calibDateStr",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = GoldAccent
+                                )
+                            }
+                        }
+
+                        // 2. حقل إدخال: سعر دولار الصاغة (SD)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "سعر دولار الصاغة (SD) (افتراضي 51.7)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = saghaDollarInput,
+                                    onValueChange = { input ->
+                                        saghaDollarInput = input.filter { it.isDigit() || it == '.' }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    placeholder = { Text("51.7", color = Color(0xFF64748B)) },
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = GoldAccent,
+                                        unfocusedBorderColor = Color(0xFF26334A),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedContainerColor = Color(0xFF0F172A),
+                                        unfocusedContainerColor = Color(0xFF0F172A)
+                                    )
+                                )
+
+                                Button(
+                                    onClick = {
+                                        val newSd = saghaDollarInput.toDoubleOrNull() ?: 51.7
+                                        viewModel.updateSaghaDollarRate(newSd)
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                                    border = BorderStroke(1.dp, GoldAccent)
+                                ) {
+                                    Text(
+                                        text = "حفظ SD 💾",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GoldAccent
+                                    )
+                                }
+                            }
+                        }
+
+                        // 3. زر «استعادة الافتراضي»: يعيد K إلى 0.9996 وSD إلى 51.7
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.resetCalibrationToDefault()
+                                saghaDollarInput = "51.7"
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.6f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
+                        ) {
+                            Text(
+                                text = "🔄 استعادة الافتراضي (K = 0.9996 و SD = 51.7)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
@@ -696,7 +792,8 @@ fun SettingsScreen(
                         )
 
                         val liveOunce = goldPriceResponse.ouncePriceUsd
-                        val saghaUsd = goldPriceResponse.saghaUsdRate
+                        val saghaUsd = marketAdminSettings.saghaUsdRate
+                        val calibK = marketAdminSettings.calibrationK
                         val raw21 = if (liveOunce > 0.0 && saghaUsd > 0.0) {
                             (liveOunce * saghaUsd / 31.1035) * (21.0 / 24.0)
                         } else 0.0
@@ -709,7 +806,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "الأونصة عالميًا (XAU):",
+                                text = "الأونصة عالميًا (XAU/USD):",
                                 fontSize = 12.5.sp,
                                 color = TextDark
                             )
@@ -728,7 +825,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "دولار الصاغة المعتمد:",
+                                text = "دولار الصاغة (SD):",
                                 fontSize = 12.5.sp,
                                 color = TextDark
                             )
@@ -740,7 +837,26 @@ fun SettingsScreen(
                             )
                         }
 
-                        // 3. السعر الخام لعيار 21
+                        // 3. معامل المعايرة K
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "معامل المعايرة اللحظي (K):",
+                                fontSize = 12.5.sp,
+                                color = TextDark
+                            )
+                            Text(
+                                text = String.format(Locale.US, "%.4f", calibK),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldLight
+                            )
+                        }
+
+                        // 4. السعر الخام لعيار 21
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -759,15 +875,15 @@ fun SettingsScreen(
                             )
                         }
 
-                        // 4. سعر شراء عيار 21 (الخام × 1.0019)
+                        // 5. سعر شراء عيار 21 (الخام × K × 1.0019)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "شراء عيار 21 المحسوب (1.0019):",
-                                fontSize = 12.5.sp,
+                                text = "شراء عيار 21: round(Raw × K × 1.0019):",
+                                fontSize = 12.sp,
                                 color = TextDark
                             )
                             Text(
@@ -778,15 +894,15 @@ fun SettingsScreen(
                             )
                         }
 
-                        // 5. سعر بيع عيار 21 (الخام × 0.9972)
+                        // 6. سعر بيع عيار 21 (الخام × K × 0.9972)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "بيع عيار 21 المحسوب (0.9972):",
-                                fontSize = 12.5.sp,
+                                text = "بيع عيار 21: round(Raw × K × 0.9972):",
+                                fontSize = 12.sp,
                                 color = TextDark
                             )
                             Text(
@@ -807,7 +923,7 @@ fun SettingsScreen(
                                 .padding(8.dp)
                         ) {
                             Text(
-                                text = "المعادلة: Raw = XAU × ${saghaUsd} ÷ 31.1035 × (العيار ÷ 24)\nشراء = round(Raw × 1.0019) | بيع = round(Raw × 0.9972)",
+                                text = "معادلة جولد بيليون:\nRaw = XAU × SD ÷ 31.1035 × (العيار ÷ 24)\nالشراء = round(Raw × K × 1.0019)\nالبيع = round(Raw × K × 0.9972)",
                                 fontSize = 10.5.sp,
                                 color = GoldAccent,
                                 lineHeight = 15.sp

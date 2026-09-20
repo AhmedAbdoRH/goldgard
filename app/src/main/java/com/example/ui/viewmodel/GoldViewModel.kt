@@ -576,11 +576,18 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var currentRetryDelaySec = 30L
+
+    fun onAppForegrounded() {
+        // فور عودة التطبيق للمقدمة (visibilitychange)
+        refreshPrices(silent = true, forceRefresh = true)
+    }
+
     private fun startPeriodicPriceUpdates() {
         priceUpdateJob?.cancel()
         priceUpdateJob = viewModelScope.launch {
             while (isActive) {
-                val cycleSec = _marketAdminSettings.value.refreshIntervalSeconds.coerceIn(10L, 300L).toInt()
+                val cycleSec = currentRetryDelaySec.toInt()
                 for (sec in cycleSec downTo 1) {
                     _countdownSeconds.value = sec
                     delay(1000L)
@@ -633,35 +640,54 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
             isRefreshingTaskRunning = true
             if (!silent) _isRefreshing.value = true
             try {
-                val prevP21 = _goldPriceResponse.value.gram21.sell
+                val currentDisplayedBuy21 = _goldPriceResponse.value.gram21.buy
                 val fullResponse = repository.getLiveGoldPriceResponse(forceRefresh)
-                val newP21 = fullResponse.gram21.sell
 
-                if (prevP21 > 100.0 && newP21 > 100.0) {
-                    val diff = newP21 - prevP21
-                    val diffPct = (diff / prevP21) * 100.0
-                    _priceDiffEGP.value = diff
-                    _priceDiffPercent.value = diffPct
-                    _priceDirection.value = when {
-                        diff > 0.05 -> PriceDirection.UP
-                        diff < -0.05 -> PriceDirection.DOWN
-                        else -> PriceDirection.STABLE
-                    }
+                // 1. Assertion: شراء دائماً أكبر من بيع
+                if (fullResponse.gram21.buy <= fullResponse.gram21.sell) {
+                    android.util.Log.e("GoldEngine", "BUG: الأعمدة معكوسة - سعر الشراء (${fullResponse.gram21.buy}) <= سعر البيع (${fullResponse.gram21.sell})")
+                    return@launch
+                }
 
-                    if (abs(diff) >= 0.1) {
-                        _isPriceFlashing.value = true
-                        viewModelScope.launch {
-                            delay(1800L)
-                            _isPriceFlashing.value = false
-                        }
-                        val admin = _marketAdminSettings.value
-                        SoundAlertManager.playPriceChangeAlert(
-                            context = getApplication(),
-                            isIncrease = diff > 0,
-                            enableSound = admin.soundAlertEnabled,
-                            enableVibration = admin.vibrationEnabled
-                        )
+                // 2. إدارة فشل الاتصال والتراجع الزمني 30 -> 60 -> 120 -> 300 ثانية
+                if (fullResponse.status == "connection_lost") {
+                    currentRetryDelaySec = when (currentRetryDelaySec) {
+                        30L -> 60L
+                        60L -> 120L
+                        else -> 300L
                     }
+                    _goldPriceResponse.value = fullResponse
+                    return@launch
+                } else {
+                    currentRetryDelaySec = 30L
+                }
+
+                val newBuy21 = fullResponse.gram21.buy
+                val diffEGP = if (currentDisplayedBuy21 > 100.0) newBuy21 - currentDisplayedBuy21 else 0.0
+
+                // 3. قواعد الاستقرار:
+                // إذا فرق السعر الجديد عن المعروض <= 2 جنيه: لا تحدث الواجهة (لا وميض ولا صوت)
+                if (currentDisplayedBuy21 > 100.0 && kotlin.math.abs(diffEGP) <= 2.0 && !forceRefresh) {
+                    _lastUpdatedText.value = fullResponse.lastUpdated
+                    return@launch
+                }
+
+                // 4. التغير >= 3 جنيه: حدّث + ومّض + صوت 880Hz للارتفاع و440Hz للانخفاض
+                if (currentDisplayedBuy21 > 100.0 && kotlin.math.abs(diffEGP) >= 3.0) {
+                    _priceDiffEGP.value = diffEGP
+                    _priceDirection.value = if (diffEGP > 0) PriceDirection.UP else PriceDirection.DOWN
+                    _isPriceFlashing.value = true
+                    viewModelScope.launch {
+                        delay(1800L)
+                        _isPriceFlashing.value = false
+                    }
+                    val admin = _marketAdminSettings.value
+                    SoundAlertManager.playPriceChangeAlert(
+                        context = getApplication(),
+                        isIncrease = diffEGP > 0,
+                        enableSound = admin.soundAlertEnabled,
+                        enableVibration = admin.vibrationEnabled
+                    )
                 }
 
                 _goldPriceResponse.value = fullResponse
@@ -680,16 +706,7 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
                 recalculateTraderComparison()
 
                 if (!silent) {
-                    val statusAr = when (fullResponse.status) {
-                        "live" -> "مباشر"
-                        "unchanged" -> "لم يتغير"
-                        "cached" -> "محفوظ محلياً"
-                        "stale" -> "قديم نسبيًا"
-                        "unavailable" -> "غير متاح"
-                        "anomaly" -> "تنبيه تغير مفاجئ"
-                        else -> "استرشادي"
-                    }
-                    _toastEvent.emit("تم تحديث أسعار الذهب لحظياً ($statusAr) ✅")
+                    _toastEvent.emit("تم تحديث أسعار الذهب لحظياً ✅")
                 }
             } catch (e: Exception) {
                 if (!silent) {
@@ -698,6 +715,56 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 if (!silent) _isRefreshing.value = false
                 isRefreshingTaskRunning = false
+            }
+        }
+    }
+
+    fun calibrateWithGoldBullion21(enteredBuy21: Double) {
+        viewModelScope.launch {
+            if (enteredBuy21 <= 500.0) {
+                _toastEvent.emit("يرجى إدخال سعر شراء صحيح لعيار 21 (مثال: 6385)")
+                return@launch
+            }
+            try {
+                val (newK, calibDate) = repository.calibrateWithEntered21(enteredBuy21)
+                val updatedAdmin = repository.loadMarketAdminSettings()
+                _marketAdminSettings.value = updatedAdmin
+                refreshPrices(silent = false, forceRefresh = true)
+                _toastEvent.emit("تمت المعايرة بنجاح (K = ${String.format(Locale.US, "%.4f", newK)})")
+            } catch (e: Exception) {
+                _toastEvent.emit("فشلت المعايرة: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun resetCalibrationToDefault() {
+        viewModelScope.launch {
+            try {
+                val defaultK = repository.resetCalibrationK()
+                val updatedAdmin = repository.loadMarketAdminSettings()
+                _marketAdminSettings.value = updatedAdmin
+                refreshPrices(silent = false, forceRefresh = true)
+                _toastEvent.emit("تمت استعادة المعامل الافتراضي ($defaultK)")
+            } catch (e: Exception) {
+                _toastEvent.emit("فشل الاسترجاع: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun updateSaghaDollarRate(newSd: Double) {
+        viewModelScope.launch {
+            if (newSd <= 10.0) {
+                _toastEvent.emit("يرجى إدخال سعر دولار صاغة صحيح (مثال: 51.7)")
+                return@launch
+            }
+            try {
+                repository.updateSaghaDollar(newSd)
+                val updatedAdmin = repository.loadMarketAdminSettings()
+                _marketAdminSettings.value = updatedAdmin
+                refreshPrices(silent = false, forceRefresh = true)
+                _toastEvent.emit("تم تحديث وحفظ دولار الصاغة (${newSd} ج.م)")
+            } catch (e: Exception) {
+                _toastEvent.emit("فشل التحديث: ${e.localizedMessage}")
             }
         }
     }

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,8 +25,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,7 +39,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,8 +78,6 @@ fun HomeScreen(
     val priceDiffEGP by viewModel.priceDiffEGP.collectAsStateWithLifecycle()
     val priceDiffPercent by viewModel.priceDiffPercent.collectAsStateWithLifecycle()
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
-    val manualP21Input by viewModel.manualP21Input.collectAsStateWithLifecycle()
-    val manualUsdMidInput by viewModel.manualUsdMidInput.collectAsStateWithLifecycle()
 
     var showPriceExplainerDialog by remember { mutableStateOf(false) }
 
@@ -201,148 +195,6 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold,
                         color = pillColor
                     )
-                }
-            }
-        }
-
-        // محرك التسعير الوحيد المعتمد (نظام جولد بيليون)
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .testTag("pricing_engine_card"),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surface),
-                border = BorderStroke(1.dp, GoldTheme.colors.goldPrimary.copy(alpha = 0.5f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "⚖️", fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "محرك التسعير المعتمد",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Black,
-                                color = GoldTheme.colors.goldPrimary
-                            )
-                        }
-                        Text(
-                            text = "نظام جولد بيليون",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.goldPrimary,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(GoldTheme.colors.goldPrimary.copy(alpha = 0.12f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-
-                    Text(
-                        text = "الأسعار مشتقة بنسبة النقاء من عيار 21 (نظام جولد بيليون)",
-                        fontSize = 11.5.sp,
-                        color = GoldTheme.colors.textSecondary
-                    )
-
-                    // الحقل الوحيد الذي يقود الأسعار: سعر عيار 21 الحالي (متوسط السوق)
-                    OutlinedTextField(
-                        value = manualP21Input,
-                        onValueChange = { viewModel.onManualP21InputChanged(it) },
-                        label = { Text("سعر عيار 21 الحالي (متوسط السوق)") },
-                        trailingIcon = {
-                            Text(
-                                text = "ج.م",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldTheme.colors.goldPrimary,
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("manual_p21_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GoldTheme.colors.goldPrimary,
-                            unfocusedBorderColor = GoldTheme.colors.borderColor,
-                            focusedLabelColor = GoldTheme.colors.goldPrimary,
-                            unfocusedLabelColor = GoldTheme.colors.textSecondary,
-                            cursorColor = GoldTheme.colors.goldPrimary
-                        )
-                    )
-
-                    // الحقل الاختياري: سعر صرف الدولار (متوسط السوق)
-                    OutlinedTextField(
-                        value = manualUsdMidInput,
-                        onValueChange = { viewModel.onManualUsdMidInputChanged(it) },
-                        label = { Text("سعر صرف الدولار (متوسط السوق) — اختياري") },
-                        trailingIcon = {
-                            Text(
-                                text = "ج.م",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldTheme.colors.textSecondary,
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                        },
-                        supportingText = {
-                            Text(
-                                text = "افتراضي 52.25 — لا يشترك في تسعير الذهب، يُشتق منه سعر الدولار فقط",
-                                fontSize = 10.5.sp,
-                                color = GoldTheme.colors.textSecondary
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("manual_usd_mid_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GoldTheme.colors.goldPrimary,
-                            unfocusedBorderColor = GoldTheme.colors.borderColor,
-                            focusedLabelColor = GoldTheme.colors.goldPrimary,
-                            unfocusedLabelColor = GoldTheme.colors.textSecondary,
-                            cursorColor = GoldTheme.colors.goldPrimary
-                        )
-                    )
-
-                    // زر تطبيق وتأكيد الأسعار
-                    Button(
-                        onClick = {
-                            viewModel.applyManualPricing(
-                                p21 = viewModel.parseNumber(manualP21Input),
-                                usdMid = viewModel.parseNumber(manualUsdMidInput)
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(42.dp)
-                            .testTag("apply_manual_pricing_button"),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = GoldTheme.colors.goldPrimary,
-                            contentColor = Color.Black
-                        )
-                    ) {
-                        Text(
-                            text = "تطبيق واعتماد الأسعار",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 }
             }
         }

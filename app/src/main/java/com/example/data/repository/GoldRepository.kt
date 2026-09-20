@@ -12,6 +12,8 @@ import com.example.data.local.TransactionEntity
 import com.example.data.remote.GoldApiService
 import com.example.data.remote.InternalGoldPriceBackend
 import com.example.data.remote.LivePriceResponse
+import com.example.data.remote.provider.GoldApiHybridProvider
+import com.example.util.GoldBullionPricingEngine
 import com.example.data.remote.provider.GoldAPIProvider
 import com.example.data.remote.provider.GoldPriceProvider
 import com.example.data.remote.provider.ManualAdminProvider
@@ -51,6 +53,15 @@ class GoldRepository(private val context: Context) {
     private var cachedMarketSettings: MarketAdminSettings = MarketAdminSettings()
 
     // Providers
+    val goldApiHybridProvider = GoldApiHybridProvider(
+        context = context,
+        getSd = { cachedMarketSettings.saghaUsdRate },
+        getK = { cachedMarketSettings.calibrationK },
+        onOfficialUsdUpdated = { usd ->
+            cachedMarketSettings = cachedMarketSettings.copy(cachedUsdRate = usd)
+        }
+    )
+
     val egyptianLiveProvider = EgyptianGoldLiveProvider(
         settingsProvider = { cachedMarketSettings },
         onSaveSettings = { saveMarketAdminSettings(it, "النظام", "تحديث سعر الصرف") },
@@ -192,7 +203,28 @@ class GoldRepository(private val context: Context) {
 
     suspend fun getLiveGoldPriceResponse(forceRefresh: Boolean = false): GoldPriceResponse = withContext(Dispatchers.IO) {
         loadMarketAdminSettings()
-        internalBackend.handleGetGoldPrices(forceRefresh)
+        val result = goldApiHybridProvider.getLivePrice()
+        if (result.isSuccess) {
+            val resp = result.getOrThrow()
+            saveResponseToCache(resp)
+            resp
+        } else {
+            val cached = loadResponseFromCache()
+            if (cached != null) {
+                cached.copy(status = "connection_lost")
+            } else {
+                val fallback = GoldBullionPricingEngine.calculateAll(
+                    xau = 4361.0,
+                    sd = cachedMarketSettings.saghaUsdRate,
+                    k = cachedMarketSettings.calibrationK,
+                    officialUsd = cachedMarketSettings.cachedUsdRate
+                )
+                GoldBullionPricingEngine.toResponse(
+                    calculated = fallback,
+                    status = "connection_lost"
+                )
+            }
+        }
     }
 
     private suspend fun saveResponseToCache(resp: GoldPriceResponse) {
@@ -394,6 +426,8 @@ class GoldRepository(private val context: Context) {
         val saghaUsd = settingsDao.getSettingDirect("sagha_usd_rate")?.toDoubleOrNull() ?: 51.70
         val cachedUsdTime = settingsDao.getSettingDirect("cached_usd_time")?.toLongOrNull() ?: 0L
         val cachedUsdDate = settingsDao.getSettingDirect("cached_usd_date") ?: ""
+        val calibK = settingsDao.getSettingDirect("calibration_k")?.toDoubleOrNull() ?: GoldBullionPricingEngine.DEFAULT_K
+        val calibDate = settingsDao.getSettingDirect("last_calibration_date") ?: ""
 
         val loaded = MarketAdminSettings(
             customerBuyPremiumPercent = buyPremium,
@@ -423,10 +457,52 @@ class GoldRepository(private val context: Context) {
             cachedUsdSellRate = cachedUsdSell,
             saghaUsdRate = saghaUsd,
             cachedUsdRateTimestamp = cachedUsdTime,
-            cachedUsdRateDate = cachedUsdDate
+            cachedUsdRateDate = cachedUsdDate,
+            calibrationK = calibK,
+            lastCalibrationDate = calibDate
         )
         cachedMarketSettings = loaded
         loaded
+    }
+
+    suspend fun calibrateWithEntered21(enteredBuy21: Double): Pair<Double, String> = withContext(Dispatchers.IO) {
+        val current = loadMarketAdminSettings()
+        val xau = goldApiHybridProvider.getLastKnownXau().takeIf { it > 100.0 } ?: 4379.0
+        val sd = current.saghaUsdRate
+        val newK = GoldBullionPricingEngine.calibrateK(enteredBuy21, xau, sd)
+
+        val sdf = SimpleDateFormat("yyyy/MM/dd - hh:mm a", Locale("ar", "EG"))
+        val calibDate = sdf.format(Date())
+
+        settingsDao.setSetting(SettingsEntity("calibration_k", newK.toString()))
+        settingsDao.setSetting(SettingsEntity("last_calibration_date", calibDate))
+
+        cachedMarketSettings = current.copy(
+            calibrationK = newK,
+            lastCalibrationDate = calibDate
+        )
+        Pair(newK, calibDate)
+    }
+
+    suspend fun resetCalibrationK(): Double = withContext(Dispatchers.IO) {
+        val current = loadMarketAdminSettings()
+        val defaultK = GoldBullionPricingEngine.DEFAULT_K
+        val calibDate = "الافتراضي (0.9996)"
+
+        settingsDao.setSetting(SettingsEntity("calibration_k", defaultK.toString()))
+        settingsDao.setSetting(SettingsEntity("last_calibration_date", calibDate))
+
+        cachedMarketSettings = current.copy(
+            calibrationK = defaultK,
+            lastCalibrationDate = calibDate
+        )
+        defaultK
+    }
+
+    suspend fun updateSaghaDollar(newSd: Double) = withContext(Dispatchers.IO) {
+        val current = loadMarketAdminSettings()
+        settingsDao.setSetting(SettingsEntity("sagha_usd_rate", newSd.toString()))
+        cachedMarketSettings = current.copy(saghaUsdRate = newSd)
     }
 
     suspend fun calibrateMarketFactors(

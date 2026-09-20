@@ -328,6 +328,8 @@ data class MarketAdminSettings(
     val cachedUsdRateTimestamp: Long = 0L,
     val cachedUsdRateDate: String = "",
     val manualP21Mid: Double = 6340.0,
-    val manualUsdMid: Double = 52.25
+    val manualUsdMid: Double = 52.25,
+    val calibrationK: Double = 0.9996,
+    val lastCalibrationDate: String = ""
 )
 
