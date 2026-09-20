@@ -28,6 +28,24 @@ object GoldPriceFormatter {
     }
 
     /**
+     * Formats numbers with thousand comma separators to make them easy to read without confusion.
+     * Example: 63,250 or 50,400 or 226,745
+     */
+    fun formatWithGrouping(amount: Double): String {
+        if (amount <= 0.0) return "0"
+        return String.format(Locale.US, "%,d", Math.round(amount))
+    }
+
+    /**
+     * Formats prices with 3 decimal places for specific precision (e.g. Ounce 226.745).
+     * Example: 226.745 or 31.104
+     */
+    fun formatThreeDecimals(price: Double): String {
+        if (price <= 0.0) return "0.000"
+        return String.format(Locale.US, "%,.3f", price)
+    }
+
+    /**
      * Formats USD exchange rate or ounce USD with 2 decimal places.
      * Example: 51.70 or 52.30
      */

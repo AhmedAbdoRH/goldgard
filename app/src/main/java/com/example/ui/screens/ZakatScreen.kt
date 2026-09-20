@@ -118,7 +118,7 @@ fun ZakatScreen(
             )
         }
 
-        // بطاقة حد النصاب اللحظي (85 جم عيار 24 للبيع مع فاصلة للأرقام)
+        // بطاقة حد النصاب الشرعي: الاكتفاء بمعلومة 85 جرام ذهب عيار 24
         item {
             Card(
                 modifier = Modifier
@@ -128,72 +128,29 @@ fun ZakatScreen(
                 colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surfaceElevated),
                 border = BorderStroke(1.dp, GoldTheme.colors.goldPrimary.copy(alpha = 0.35f))
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(text = "⚖️", fontSize = 15.sp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "حد النصاب الشرعي",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = GoldTheme.colors.goldPrimary
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "ما يعادل 85 جرام من الذهب الخالص (عيار 24)",
-                                fontSize = 11.5.sp,
-                                color = GoldTheme.colors.textSecondary
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "${numberFormatter.format(Math.round(nisab))} ج.م",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Black,
-                                color = GoldTheme.colors.textPrimary
-                            )
-                            Text(
-                                text = "بسعر البيع اللحظي",
-                                fontSize = 10.5.sp,
-                                color = GoldTheme.colors.textSecondary
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(
-                        color = GoldTheme.colors.borderColor.copy(alpha = 0.5f),
-                        thickness = 0.8.dp
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "⚖️", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "سعر جرام عيار 24 المعتمد:",
-                            fontSize = 12.sp,
-                            color = GoldTheme.colors.textSecondary
-                        )
-                        Text(
-                            text = "${numberFormatter.format(Math.round(sell24))} ج.م",
-                            fontSize = 12.sp,
+                            text = "حد النصاب الشرعي",
+                            fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.textPrimary
+                            color = GoldTheme.colors.goldPrimary
                         )
                     }
+                    Text(
+                        text = "85 جرام ذهب عيار 24",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldTheme.colors.textPrimary
+                    )
                 }
             }
         }

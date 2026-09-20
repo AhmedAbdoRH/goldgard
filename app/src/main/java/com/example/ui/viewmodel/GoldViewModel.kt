@@ -169,7 +169,7 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var buyWeight = MutableStateFlow("")
         private set
-    var buyMakingPercent = MutableStateFlow("5")
+    var buyMakingPercent = MutableStateFlow("7")
         private set
     var buyMakingAmountPerGram = MutableStateFlow("")
         private set
@@ -299,7 +299,7 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
             manualUsdMidInput.value = String.format(Locale.US, "%.2f", usdVal)
 
             buyWeight.value = "20"
-            buyMakingPercent.value = "10"
+            buyMakingPercent.value = "7"
             buyStampFee.value = loadedSettings.defaultStampFeePerGram.toString()
             sellDeductionPercent.value = loadedSettings.defaultSellDeductionPercent.toString()
 
@@ -1292,7 +1292,7 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
         val country = _selectedCountry.value
         val defaultSettings = GoldSettings(
             selectedCountry = country,
-            defaultBuyMakingPercent = 5.0,
+            defaultBuyMakingPercent = 7.0,
             defaultSellDeductionPercent = 2.0,
             defaultStampFeePerGram = country.defaultStampFee
         )
@@ -1459,8 +1459,7 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
             appendLine("عيار 18: شراء ${com.example.util.GoldPriceFormatter.formatGram(response.gram18.buy)} | بيع ${com.example.util.GoldPriceFormatter.formatGram(response.gram18.sell)} ج.م")
             appendLine("عيار 14: شراء ${com.example.util.GoldPriceFormatter.formatGram(response.gram14.buy)} | بيع ${com.example.util.GoldPriceFormatter.formatGram(response.gram14.sell)} ج.م")
             appendLine("جنيه الذهب (8 جم): شراء ${com.example.util.GoldPriceFormatter.formatWhole(response.gram21.buy * 8)} | بيع ${com.example.util.GoldPriceFormatter.formatWhole(response.gram21.sell * 8)} ج.م")
-            appendLine("الدولار: شراء ${String.format(Locale.US, "%.2f", response.usdBuyRate)} | بيع ${String.format(Locale.US, "%.2f", response.usdSellRate)} ج.م")
-            appendLine("دولار الصاغة: ${String.format(Locale.US, "%.2f", response.saghaUsdRate)} ج.م")
+            appendLine("سعر صرف الدولار: شراء ${String.format(Locale.US, "%.2f", response.usdBuyRate)} | بيع ${String.format(Locale.US, "%.2f", response.usdSellRate)} ج.م")
             appendLine()
             appendLine("الأسعار استرشادية وتُحدَّث وفق سوق الصاغة المصري.")
         }

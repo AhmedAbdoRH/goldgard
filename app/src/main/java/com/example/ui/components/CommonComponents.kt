@@ -557,7 +557,7 @@ fun MarketPricesSection(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // بطاقة أسعار الدولار تحت جدول العيارات: سعر الدولار + دولار الصاغة
+        // بطاقة أسعار الدولار تحت جدول العيارات: سعر صرف الدولار
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -572,59 +572,28 @@ fun MarketPricesSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // سعر الدولار
-                Column(modifier = Modifier.weight(1.2f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "💵", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "سعر الدولار",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.textPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Text(text = "💵", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "شراء ${String.format(java.util.Locale.US, "%.2f", goldPriceResponse.usdBuyRate)} — بيع ${String.format(java.util.Locale.US, "%.2f", goldPriceResponse.usdSellRate)} ج.م",
+                        text = "سعر صرف الدولار",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = GoldTheme.colors.goldPrimary
+                        color = GoldTheme.colors.textPrimary,
+                        maxLines = 1
                     )
                 }
-
-                Box(
-                    modifier = Modifier
-                        .height(30.dp)
-                        .width(1.dp)
-                        .background(GoldTheme.colors.borderColor)
+                Text(
+                    text = "شراء ${String.format(java.util.Locale.US, "%.2f", goldPriceResponse.usdBuyRate)} — بيع ${String.format(java.util.Locale.US, "%.2f", goldPriceResponse.usdSellRate)} ج.م",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GoldTheme.colors.goldPrimary,
+                    maxLines = 1,
+                    softWrap = false
                 )
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                // دولار الصاغة
-                Column(
-                    modifier = Modifier.weight(0.9f),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "⚖️", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "دولار الصاغة",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.textPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "${goldPriceResponse.saghaUsdRate} ج.م",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        color = GoldTheme.colors.goldPrimary
-                    )
-                }
             }
         }
 
@@ -666,13 +635,13 @@ fun GoldPriceTable(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .background(GoldTheme.colors.surfaceElevated)
-                    .padding(vertical = 7.dp, horizontal = 10.dp),
+                    .padding(vertical = 7.dp, horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "العيار",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.85f),
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     color = GoldTheme.colors.textPrimary,
@@ -680,7 +649,7 @@ fun GoldPriceTable(
                 )
                 Text(
                     text = "شراء جديد",
-                    modifier = Modifier.weight(1.3f),
+                    modifier = Modifier.weight(1.1f),
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     color = GoldTheme.colors.success,
@@ -688,7 +657,7 @@ fun GoldPriceTable(
                 )
                 Text(
                     text = "بيع مستعمل",
-                    modifier = Modifier.weight(1.3f),
+                    modifier = Modifier.weight(1.1f),
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     color = GoldTheme.colors.danger,
@@ -717,7 +686,7 @@ fun GoldPriceTable(
                 val mid = (safeBuy + safeSell) / 2.0
                 val gapPercent = if (mid > 0.0) (gap / mid) * 100.0 else 0.0
 
-                val gapText = "الفارق: ${Math.round(gap)} ج.م (${String.format(java.util.Locale.US, "%.2f", gapPercent)}%)"
+                val gapText = "الفرق: ${Math.round(gap)} ج.م (${String.format(java.util.Locale.US, "%.1f", gapPercent)}%)"
 
                 GoldPriceRow(
                     label = "عيار $karat",
@@ -809,7 +778,7 @@ fun FoldableUnitsAndBullionSection(
                         .fillMaxWidth()
                         .padding(top = 8.dp)
                 ) {
-                    // Header Row: الصنف | شراء جديد | بيع مستعمل
+                    // Header Row: الصنف / الوزن | شراء جديد | بيع مستعمل
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -821,14 +790,15 @@ fun FoldableUnitsAndBullionSection(
                     ) {
                         Text(
                             text = "الصنف / الوزن",
-                            modifier = Modifier.weight(1.2f),
+                            modifier = Modifier.weight(1.85f),
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.5.sp,
-                            color = GoldTheme.colors.textPrimary
+                            color = GoldTheme.colors.textPrimary,
+                            textAlign = TextAlign.Start
                         )
                         Text(
                             text = "شراء جديد",
-                            modifier = Modifier.weight(1.2f),
+                            modifier = Modifier.weight(1.1f),
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.5.sp,
                             color = GoldTheme.colors.success,
@@ -836,7 +806,7 @@ fun FoldableUnitsAndBullionSection(
                         )
                         Text(
                             text = "بيع مستعمل",
-                            modifier = Modifier.weight(1.2f),
+                            modifier = Modifier.weight(1.1f),
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.5.sp,
                             color = GoldTheme.colors.danger,
@@ -861,10 +831,10 @@ fun FoldableUnitsAndBullionSection(
                         val ounceBuy = g24.buy * 31.1035
                         val ounceSell = g24.sell * 31.1035
                         GoldPriceRow(
-                            label = "الأونصة (31.10 جم)",
+                            label = "أونصة 31.10 جم",
                             isBenchmark = false,
-                            buyText = "${com.example.util.GoldPriceFormatter.formatWhole(ounceBuy)} ج.م",
-                            sellText = "${com.example.util.GoldPriceFormatter.formatWhole(ounceSell)} ج.م"
+                            buyText = "${com.example.util.GoldPriceFormatter.formatThreeDecimals(ounceBuy)} ج.م",
+                            sellText = "${com.example.util.GoldPriceFormatter.formatThreeDecimals(ounceSell)} ج.م"
                         )
 
                         HorizontalDivider(
@@ -877,10 +847,10 @@ fun FoldableUnitsAndBullionSection(
                         val poundBuy = g21.buy * 8.0
                         val poundSell = g21.sell * 8.0
                         GoldPriceRow(
-                            label = "جنيه ذهب (8 جم)",
+                            label = "جنيه ذهب 8 جم",
                             isBenchmark = false,
-                            buyText = "${com.example.util.GoldPriceFormatter.formatWhole(poundBuy)} ج.م",
-                            sellText = "${com.example.util.GoldPriceFormatter.formatWhole(poundSell)} ج.م"
+                            buyText = "${com.example.util.GoldPriceFormatter.formatWithGrouping(poundBuy)} ج.م",
+                            sellText = "${com.example.util.GoldPriceFormatter.formatWithGrouping(poundSell)} ج.م"
                         )
 
                         HorizontalDivider(
@@ -891,14 +861,14 @@ fun FoldableUnitsAndBullionSection(
 
                         // 3. السبائك عيار 24 بالأوزان القياسية
                         val standardWeights = listOf(
-                            1.0 to "سبيكة 1 جرام",
-                            2.5 to "سبيكة 2.5 جرام",
-                            5.0 to "سبيكة 5 جرام",
-                            10.0 to "سبيكة 10 جرام",
-                            20.0 to "سبيكة 20 جرام",
-                            50.0 to "سبيكة 50 جرام",
-                            100.0 to "سبيكة 100 جرام",
-                            250.0 to "سبيكة 250 جرام"
+                            1.0 to "سبيكة 1 جم",
+                            2.5 to "سبيكة 2.5 جم",
+                            5.0 to "سبيكة 5 جم",
+                            10.0 to "سبيكة 10 جم",
+                            20.0 to "سبيكة 20 جم",
+                            50.0 to "سبيكة 50 جم",
+                            100.0 to "سبيكة 100 جم",
+                            250.0 to "سبيكة 250 جم"
                         )
 
                         standardWeights.forEachIndexed { idx, (weight, name) ->
@@ -908,8 +878,8 @@ fun FoldableUnitsAndBullionSection(
                             GoldPriceRow(
                                 label = name,
                                 isBenchmark = false,
-                                buyText = "${com.example.util.GoldPriceFormatter.formatWhole(bullionBuy)} ج.م",
-                                sellText = "${com.example.util.GoldPriceFormatter.formatWhole(bullionSell)} ج.م"
+                                buyText = "${com.example.util.GoldPriceFormatter.formatWithGrouping(bullionBuy)} ج.م",
+                                sellText = "${com.example.util.GoldPriceFormatter.formatWithGrouping(bullionSell)} ج.م"
                             )
 
                             if (idx < standardWeights.size - 1) {
@@ -952,30 +922,40 @@ private fun GoldPriceRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Karat label + ⭐ with 6-8px space, plus gap below
+        // Karat label + ⭐ with gap below
         Column(
-            modifier = Modifier.weight(1.1f),
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.weight(1.85f),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.Start
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
                 Text(
                     text = label,
-                    fontSize = 13.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = if (isBenchmark) FontWeight.Black else FontWeight.Bold,
-                    color = if (isBenchmark) GoldTheme.colors.goldPrimary else GoldTheme.colors.textPrimary
+                    color = if (isBenchmark) GoldTheme.colors.goldPrimary else GoldTheme.colors.textPrimary,
+                    maxLines = 1,
+                    softWrap = false,
+                    textAlign = TextAlign.Start
                 )
                 if (isBenchmark) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "⭐", fontSize = 11.sp)
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(text = "⭐", fontSize = 10.sp)
                 }
             }
             if (gapText.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = gapText,
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
-                    color = GoldTheme.colors.textSecondary
+                    color = GoldTheme.colors.textSecondary,
+                    maxLines = 1,
+                    softWrap = false,
+                    textAlign = TextAlign.Start
                 )
             }
         }
@@ -983,21 +963,25 @@ private fun GoldPriceRow(
         // Buy price (Green, horizontal format)
         Text(
             text = buyText,
-            modifier = Modifier.weight(1.3f),
-            fontSize = 12.5.sp,
+            modifier = Modifier.weight(1.1f),
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.Bold,
             color = GoldTheme.colors.success,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false
         )
 
         // Sell price (Red, horizontal format)
         Text(
             text = sellText,
-            modifier = Modifier.weight(1.3f),
-            fontSize = 12.5.sp,
+            modifier = Modifier.weight(1.1f),
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.Bold,
             color = GoldTheme.colors.danger,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

@@ -138,14 +138,17 @@ fun PricesScreen(
                         Text(
                             text = "سعر الدولار",
                             fontSize = 11.sp,
-                            color = GoldTheme.colors.textSecondary
+                            color = GoldTheme.colors.textSecondary,
+                            maxLines = 1
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "$formattedUsdRate ج.م",
-                            fontSize = 14.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.textPrimary
+                            color = GoldTheme.colors.textPrimary,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
 
@@ -217,8 +220,10 @@ fun PricesScreen(
                 } else {
                     Text(
                         text = "آخر تحديث: $lastUpdate — الدولار: $formattedUsdRate ج.م",
-                        fontSize = 11.5.sp,
-                        color = GoldTheme.colors.textSecondary
+                        fontSize = 11.sp,
+                        color = GoldTheme.colors.textSecondary,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
 

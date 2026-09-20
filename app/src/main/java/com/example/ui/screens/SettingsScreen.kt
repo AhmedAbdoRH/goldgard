@@ -345,7 +345,7 @@ fun SettingsScreen(
                 ) {
                     val goldPrices by viewModel.goldPrices.collectAsStateWithLifecycle()
                     val price21 = goldPrices.find { it.karat == 21 }?.buyPrice ?: selectedCountry.defaultBenchmark21Buy
-                    val makingPct = buyMakingInput.toDoubleOrNull() ?: 5.0
+                    val makingPct = buyMakingInput.toDoubleOrNull() ?: 7.0
                     val approxAmount = price21 * (makingPct / 100.0)
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -673,7 +673,7 @@ fun SettingsScreen(
                 ) {
                     Button(
                         onClick = {
-                            val buyMaking = buyMakingInput.toDoubleOrNull() ?: 5.0
+                            val buyMaking = buyMakingInput.toDoubleOrNull() ?: 7.0
                             val sellDeduction = sellDeductionInput.toDoubleOrNull() ?: 2.0
                             val stamp = stampFeeInput.toDoubleOrNull() ?: selectedCountry.defaultStampFee
                             viewModel.saveSettings(buyMaking, sellDeduction, stamp)
@@ -741,7 +741,7 @@ fun SettingsScreen(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "• مصنعية الشراء: تختلف المصنعية من محل لآخر وحسب نوع المشغولات. النسبة الافتراضية 5% هي متوسط متوازن للتفاوض.",
+                            text = "• مصنعية الشراء: تختلف المصنعية من محل لآخر وحسب نوع المشغولات. النسبة الافتراضية 7% هي متوسط متوازن للتفاوض.",
                             fontSize = 12.sp,
                             color = Color(0xFF78350F),
                             lineHeight = 18.sp

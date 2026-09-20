@@ -37,7 +37,7 @@ enum class Country(
 
     fun formatPrice(amount: Double): String {
         if (decimalPlaces == 0) {
-            return Math.round(amount).toString()
+            return DecimalFormat("#,###", DecimalFormatSymbols(Locale.US)).format(Math.round(amount))
         }
         val pattern = when (decimalPlaces) {
             2 -> "#,##0.00"
@@ -67,7 +67,7 @@ data class GoldPrice(
 
 data class GoldSettings(
     val selectedCountry: Country = Country.EGYPT,
-    val defaultBuyMakingPercent: Double = 5.0,
+    val defaultBuyMakingPercent: Double = 7.0,
     val defaultSellDeductionPercent: Double = 2.0,
     val defaultStampFeePerGram: Double = 10.0,
     val defaultDamagedPercent: Double = 0.0,

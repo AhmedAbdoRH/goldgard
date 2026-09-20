@@ -368,7 +368,7 @@ class GoldRepository(private val context: Context) {
     suspend fun loadSettings(): GoldSettings = withContext(Dispatchers.IO) {
         val countryCode = settingsDao.getSettingDirect("selected_country") ?: "EG"
         val country = Country.fromCode(countryCode)
-        val buyMaking = settingsDao.getSettingDirect("buy_making")?.toDoubleOrNull() ?: 5.0
+        val buyMaking = settingsDao.getSettingDirect("buy_making")?.toDoubleOrNull() ?: 7.0
         val sellDeduction = settingsDao.getSettingDirect("sell_deduction")?.toDoubleOrNull() ?: 2.0
         val stampFee = settingsDao.getSettingDirect("stamp_fee")?.toDoubleOrNull() ?: country.defaultStampFee
         val defaultDamaged = settingsDao.getSettingDirect("sell_damaged")?.toDoubleOrNull() ?: 0.0
