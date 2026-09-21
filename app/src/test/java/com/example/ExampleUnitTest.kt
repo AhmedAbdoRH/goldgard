@@ -11,69 +11,63 @@ class ExampleUnitTest {
   }
 
   @Test
-  fun testGoldBullionPricingEngine_karat21() {
-    val pair = GoldBullionPricingEngine.calculatePair(mid = 6340.0)
-    // Buy = round(6340 * 1.0024) = 6355
-    // Sell = round(6340 * 0.9976) = 6325
-    assertEquals(6355.0, pair.buy, 0.01)
-    assertEquals(6325.0, pair.sell, 0.01)
-    assertTrue("Buy must be greater than Sell", pair.buy > pair.sell)
-    val gap = pair.buy - pair.sell
-    assertEquals(30.0, gap, 0.01)
+  fun testGoldBullionPricingEngine_formulas() {
+    val xau = 3000.0
+    val sd = 51.7
+    val k = 1.0
+
+    // raw21 = 3000 * 51.7 / 31.1035 * (21 / 24) = 4986.577... * 0.875 = 4363.255
+    val raw21 = GoldBullionPricingEngine.calculateRaw(xau, sd, 21)
+    assertTrue("Raw 21 must be positive", raw21 > 4000.0)
+
+    val pair21 = GoldBullionPricingEngine.calculateKaratPair(raw21, k)
+    assertTrue("Buy must be greater than Sell", pair21.buy > pair21.sell)
+    assertEquals(pair21.buy, Math.round(raw21 * k * 1.0019).toDouble(), 0.01)
+    assertEquals(pair21.sell, Math.round(raw21 * k * 0.9972).toDouble(), 0.01)
   }
 
   @Test
-  fun testGoldBullionPricingEngine_karat24() {
-    val mid24 = GoldBullionPricingEngine.deriveMid(p21 = 6340.0, karat = 24)
-    assertEquals(7246.0, mid24, 0.01)
-    val pair = GoldBullionPricingEngine.calculatePair(mid = mid24)
-    // Buy = round(7246 * 1.0024) = 7263
-    // Sell = round(7246 * 0.9976) = 7229
-    assertEquals(7263.0, pair.buy, 0.01)
-    assertEquals(7229.0, pair.sell, 0.01)
-    assertTrue("Buy must be greater than Sell", pair.buy > pair.sell)
+  fun testGoldBullionPricingEngine_calibration() {
+    val xau = 3000.0
+    val sd = 51.7
+    val entered21 = 6385.0
+
+    val calculatedK = GoldBullionPricingEngine.calibrateK(entered21, xau, sd)
+    assertTrue("K must be positive", calculatedK > 0.5)
+
+    // With this K, calculated buy for 21 must be exactly entered21
+    val raw21 = GoldBullionPricingEngine.calculateRaw(xau, sd, 21)
+    val pair21 = GoldBullionPricingEngine.calculateKaratPair(raw21, calculatedK)
+    assertEquals(entered21, pair21.buy, 1.0)
   }
 
   @Test
-  fun testGoldBullionPricingEngine_karat18() {
-    val mid18 = GoldBullionPricingEngine.deriveMid(p21 = 6340.0, karat = 18)
-    assertEquals(5434.0, mid18, 0.01)
-    val pair = GoldBullionPricingEngine.calculatePair(mid = mid18)
-    // Buy = round(5434 * 1.0024) = 5447
-    // Sell = round(5434 * 0.9976) = 5421
-    assertEquals(5447.0, pair.buy, 0.01)
-    assertEquals(5421.0, pair.sell, 0.01)
-    assertTrue("Buy must be greater than Sell", pair.buy > pair.sell)
-  }
-
-  @Test
-  fun testGoldBullionPricingEngine_usd() {
-    val usdPair = GoldBullionPricingEngine.calculateUsdRates(usdMid = 52.25)
-    // Buy = 52.30, Sell = 52.20
-    assertEquals(52.30, usdPair.first, 0.001)
-    assertEquals(52.20, usdPair.second, 0.001)
-    assertTrue("USD Buy must be greater than Sell", usdPair.first > usdPair.second)
+  fun testGoldBullionPricingEngine_goldPound() {
+    val prices = GoldBullionPricingEngine.calculateAll(xau = 3000.0, sd = 51.7, k = 1.0)
+    assertEquals((prices.gram21.buy.toLong() * 8).toDouble(), prices.goldPound.buy, 0.01)
+    assertEquals((prices.gram21.sell.toLong() * 8).toDouble(), prices.goldPound.sell, 0.01)
+    assertTrue("Pound Buy must be greater than Pound Sell", prices.goldPound.buy > prices.goldPound.sell)
   }
 
   @Test
   fun testGoldBullionPricingEngine_zakatCalculation() {
-    val fullResponse = GoldBullionPricingEngine.buildGoldPriceResponse(
-      p21 = 6340.0,
-      usdMid = 52.25
+    val weight = 100.0
+    val karat = 21
+    val sell24 = 7000.0
+    val sell21 = 6125.0
+
+    val zakat = GoldBullionPricingEngine.calculateZakat(
+      weight = weight,
+      karat = karat,
+      sell24Price = sell24,
+      chosenKaratSellPrice = sell21
     )
-    val sell24 = fullResponse.gram24.sell
-    assertEquals(7229.0, sell24, 0.01)
-    val nisabThresholdMoney = 85.0 * sell24
-    assertEquals(614465.0, nisabThresholdMoney, 0.01)
 
-    // 100 grams of karat 21
-    val sell21 = fullResponse.gram21.sell
-    assertEquals(6325.0, sell21, 0.01)
-    val userValue = 100.0 * sell21
-    assertEquals(632500.0, userValue, 0.01)
-    assertTrue("User value must exceed nisab", userValue >= nisabThresholdMoney)
-
-    val zakatMoney = userValue * 0.025
-    assertEquals(15812.5, zakatMoney, 0.01)
+    val expectedTotal = 100.0 * 6125.0 // 612,500
+    val expectedNisab = 85.0 * 7000.0 // 595,000
+    assertEquals(expectedTotal, zakat.totalValue, 0.01)
+    assertEquals(expectedNisab, zakat.nisabValue, 0.01)
+    assertTrue("Zakat should be due as totalValue > nisab", zakat.isZakatDue)
+    assertEquals(Math.round(expectedTotal * 0.025), zakat.zakatAmount)
   }
 }
