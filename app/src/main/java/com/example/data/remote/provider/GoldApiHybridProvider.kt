@@ -54,6 +54,7 @@ class GoldApiHybridProvider(
     }
 
     init {
+        // تحميل القيم المخزنة محلياً
         try {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             cachedOfficialUsd = prefs.getFloat(KEY_OFFICIAL_USD, 52.0f).toDouble()
@@ -64,11 +65,15 @@ class GoldApiHybridProvider(
     suspend fun getLivePrice(): Result<GoldPriceResponse> = fetchMutex.withLock {
         withContext(Dispatchers.IO) {
             try {
+                // 1. فحص وتحديث سعر الدولار الرسمي (مرة كل 24 ساعة فقط)
                 val now = System.currentTimeMillis()
                 if (now - lastOfficialUsdFetchTime > 24 * 3600 * 1000L || cachedOfficialUsd <= 0.0) {
                     fetchOfficialUsdSilently()
                 }
 
+                // 2. جلب سعر الأونصة من المصدر العالمي الحصري:
+                // GET https://api.gold-api.com/price/XAU
+                // ممنوع إضافة أي مفاتيح أو headers باستثناء Cache-Control: no-cache
                 val request = Request.Builder()
                     .url(XAU_API_URL)
                     .header("Cache-Control", "no-cache")
@@ -97,6 +102,7 @@ class GoldApiHybridProvider(
                 val currentSd = getSd()
                 val currentK = getK()
 
+                // 3. تطبيق معادلة جولد بيليون الوحيدة المسموحة
                 val calculated = GoldBullionPricingEngine.calculateAll(
                     xau = xauPrice,
                     sd = currentSd,
@@ -104,6 +110,7 @@ class GoldApiHybridProvider(
                     officialUsd = cachedOfficialUsd
                 )
 
+                // تنسيق الوقت باللغة العربية
                 val sdf = SimpleDateFormat("yyyy/MM/dd - hh:mm a", Locale("ar", "EG"))
                 val formattedTime = sdf.format(Date(now))
 
@@ -144,6 +151,7 @@ class GoldApiHybridProvider(
                         cachedOfficialUsd = egpRate
                         lastOfficialUsdFetchTime = System.currentTimeMillis()
                         onOfficialUsdUpdated(egpRate)
+                        // حفظ في SharedPreferences
                         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                         prefs.edit()
                             .putFloat(KEY_OFFICIAL_USD, egpRate.toFloat())
