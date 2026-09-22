@@ -56,25 +56,40 @@ object GoldBullionPricingEngine {
         val errorMessage: String? = null
     )
 
+    /**
+     * يحسب الخام لأي عيار:
+     * raw = XAU * SD / 31.1035 * (karat / 24.0)
+     */
     fun calculateRaw(xau: Double, sd: Double, karat: Int): Double {
         if (xau <= 0.0 || sd <= 0.0) return 0.0
         return (xau * sd / OUNCE_WEIGHT_GRAMS) * (karat.toDouble() / 24.0)
     }
 
+    /**
+     * يحسب سعر الشراء والبيع لأي عيار كأرقام صحيحة بدون كسور:
+     * سعر الشراء = round(raw * K * 1.0019)
+     * سعر البيع = round(raw * K * 0.9972)
+     */
     fun calculateKaratPair(raw: Double, k: Double): PricePair {
         val buyLong = Math.round(raw * k * BUY_FACTOR)
         val sellLong = Math.round(raw * k * SELL_FACTOR)
 
+        // قاعدة الصرامة: شراء دايمًا أكبر من بيع
         if (buyLong <= sellLong) {
             val errMsg = "BUG: الأعمدة معكوسة"
             Log.e("GoldApp", errMsg)
             System.err.println(errMsg)
+            // إذا حدث أي خلل نوقف التحديث أو نضمن أن شراء أكبر
             return PricePair(buy = (sellLong + 1).toDouble(), sell = sellLong.toDouble())
         }
 
         return PricePair(buy = buyLong.toDouble(), sell = sellLong.toDouble())
     }
 
+    /**
+     * المعايرة الذاتية لـ K بناء على سعر عيار 21 المُدخل من جولد بيليون:
+     * K = entered_price / (XAU * SD / 31.1035 * 0.875 * 1.0019)
+     */
     fun calibrateK(enteredP21Buy: Double, currentXau: Double, currentSd: Double): Double {
         if (enteredP21Buy <= 0.0 || currentXau <= 0.0 || currentSd <= 0.0) {
             return DEFAULT_K
@@ -84,6 +99,9 @@ object GoldBullionPricingEngine {
         return enteredP21Buy / denominator
     }
 
+    /**
+     * حساب جميع العيارات وجنيه الذهب وسعر الدولار للعرض فقط.
+     */
     fun calculateAll(
         xau: Double,
         sd: Double = DEFAULT_SD,
@@ -102,6 +120,7 @@ object GoldBullionPricingEngine {
         val pair18 = calculateKaratPair(raw18, k)
         val pair14 = calculateKaratPair(raw14, k)
 
+        // فحص الصرامة: شراء دائمًا أكبر من بيع في كل العيارات
         val hasInversion = pair24.buy <= pair24.sell ||
                 pair22.buy <= pair22.sell ||
                 pair21.buy <= pair21.sell ||
@@ -112,10 +131,13 @@ object GoldBullionPricingEngine {
             Log.e("GoldApp", "BUG: الأعمدة معكوسة")
         }
 
+        // جنيه الذهب: شراء = شراء_21 * 8، بيع = بيع_21 * 8
         val poundBuy = (pair21.buy.toLong() * 8).toDouble()
         val poundSell = (pair21.sell.toLong() * 8).toDouble()
         val poundPair = PricePair(buy = poundBuy, sell = poundSell)
 
+        // الدولار: سطر معلومات فقط (شراء = الرسمي * 1.001، بيع = الرسمي * 0.999)
+        // لا يُستخدم في أي حساب إطلاقاً
         val usdBuy = Math.round(officialUsd * 1.001 * 100.0) / 100.0
         val usdSell = Math.round(officialUsd * 0.999 * 100.0) / 100.0
 
@@ -136,6 +158,9 @@ object GoldBullionPricingEngine {
         )
     }
 
+    /**
+     * تحويل CalculatedPrices إلى GoldPriceResponse
+     */
     fun toResponse(
         calculated: CalculatedPrices,
         timestamp: Long = System.currentTimeMillis(),
@@ -193,6 +218,12 @@ object GoldBullionPricingEngine {
         return toResponse(calculated)
     }
 
+    /**
+     * حساب زكاة الذهب حسب القاعدة الشرعية المطلوبة:
+     * - القيمة = الوزن * سعر بيع جرام العيار المختار اللحظي
+     * - النصاب = 85 * سعر بيع جرام عيار 24 اللحظي
+     * - إذا القيمة >= النصاب: الزكاة الواجبة = round(القيمة * 0.025)
+     */
     data class ZakatOutput(
         val weight: Double,
         val karat: Int,
