@@ -51,3 +51,21 @@ interface AuditLogDao {
     suspend fun clearAll()
 }
 
+@Dao
+interface PriceSnapshotDao {
+    @Query("SELECT * FROM price_snapshots ORDER BY timestamp DESC LIMIT 1")
+    fun getLatestSnapshot(): Flow<PriceSnapshotEntity?>
+
+    @Query("SELECT * FROM price_snapshots ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestSnapshotDirect(): PriceSnapshotEntity?
+
+    @Query("SELECT * FROM price_snapshots ORDER BY timestamp DESC LIMIT :limit")
+    fun getRecentSnapshots(limit: Int = 50): Flow<List<PriceSnapshotEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSnapshot(snapshot: PriceSnapshotEntity): Long
+
+    @Query("DELETE FROM price_snapshots")
+    suspend fun clearAll()
+}
+

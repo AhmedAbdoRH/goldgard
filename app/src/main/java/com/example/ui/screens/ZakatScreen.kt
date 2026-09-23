@@ -14,303 +14,375 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.ScreenType
+import com.example.model.ZakatStatus
 import com.example.ui.components.GoldScreenHeader
 import com.example.ui.theme.GoldTheme
 import com.example.ui.viewmodel.GoldViewModel
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
-import java.util.Locale
+import com.example.util.GoldPriceFormatter
 
-/**
- * شاشة «زكاة الذهب»
- * - الاسم: زكاة الذهب
- * - حد النصاب الشرعي: 85 جرام عيار 24 بسعر البيع (مكتوب بأرقام بفواصل مقروءة).
- * - شرط مرور الحول: التحقق هل مر عام هجري كامل على بلوغ النصاب أم لا.
- * - القيمة = الوزن × سعر بيع جرام العيار المختار.
- * - إذا القيمة >= النصاب ومر الحول: تجب الزكاة (2.5% من إجمالي القيمة).
- * - توضيح الحكم الشرعي في أسفل الشاشة.
- */
 @Composable
 fun ZakatScreen(
     viewModel: GoldViewModel,
     modifier: Modifier = Modifier
 ) {
-    val goldPriceResponse by viewModel.goldPriceResponse.collectAsStateWithLifecycle()
-    val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val zakatWeight by viewModel.zakatWeight.collectAsStateWithLifecycle()
+    val zakatKarat by viewModel.zakatKarat.collectAsStateWithLifecycle()
+    val zakatGramPrice by viewModel.zakatGramPrice.collectAsStateWithLifecycle()
+    val zakatIsHawlMet by viewModel.zakatIsHawlMet.collectAsStateWithLifecycle()
+    val zakatIsPersonalJewelry by viewModel.zakatIsPersonalJewelry.collectAsStateWithLifecycle()
+    val zakatPayJewelryWaraa by viewModel.zakatPayJewelryWaraa.collectAsStateWithLifecycle()
+    val zakatResult by viewModel.zakatResult.collectAsStateWithLifecycle()
 
-    var selectedKarat by rememberSaveable { mutableIntStateOf(21) }
-    var weightInput by rememberSaveable { mutableStateOf("") }
-    var hasPassedOneHijriYear by rememberSaveable { mutableStateOf(true) }
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var saveNote by remember { mutableStateOf("") }
 
-    val karats = listOf(24, 22, 21, 18, 14)
-    val numberFormatter = remember { DecimalFormat("#,###", DecimalFormatSymbols(Locale.US)) }
+    val availableKarats = listOf(24, 22, 21, 18, 14)
 
-    // سعر بيع عيار 24 اللحظي
-    val sell24 = goldPriceResponse.gram24.sell
-
-    // سعر بيع جرام العيار المختار
-    val chosenKaratSellPrice = when (selectedKarat) {
-        24 -> goldPriceResponse.gram24.sell
-        22 -> goldPriceResponse.gram22.sell
-        21 -> goldPriceResponse.gram21.sell
-        18 -> goldPriceResponse.gram18.sell
-        14 -> goldPriceResponse.gram14.sell
-        else -> goldPriceResponse.gram21.sell
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            containerColor = GoldTheme.colors.surface,
+            title = {
+                Text(
+                    text = "حفظ حساب الزكاة في السجل",
+                    color = GoldTheme.colors.goldPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "ملاحظة توضيحية للعملية (اختياري):",
+                        fontSize = 12.sp,
+                        color = GoldTheme.colors.textSecondary
+                    )
+                    OutlinedTextField(
+                        value = saveNote,
+                        onValueChange = { saveNote = it },
+                        placeholder = { Text("مثال: زكاة مال عام 1446هـ...", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldTheme.colors.goldPrimary,
+                            unfocusedBorderColor = GoldTheme.colors.borderColor
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.saveZakatCalculation(saveNote)
+                        showSaveDialog = false
+                        saveNote = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldTheme.colors.goldPrimary)
+                ) {
+                    Text("حفظ", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveDialog = false }) {
+                    Text("إلغاء", color = GoldTheme.colors.textSecondary)
+                }
+            }
+        )
     }
-
-    val weight = weightInput.toDoubleOrNull() ?: 0.0
-
-    // الحسابات المعتمدة
-    val totalValue = weight * chosenKaratSellPrice
-    val nisab = 85.0 * sell24
-    val reachedNisab = totalValue >= nisab && nisab > 0.0 && weight > 0.0
-    val isZakatDue = reachedNisab && hasPassedOneHijriYear
-    val zakatAmount = if (isZakatDue) Math.round(totalValue * 0.025) else 0L
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(GoldTheme.colors.background)
-            .testTag("zakat_screen"),
-        contentPadding = PaddingValues(bottom = 30.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .testTag("zakat_screen_root"),
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // العنوان المعتمد: «زكاة الذهب» فقط
+        // العنوان وزر الرجوع
         item {
             GoldScreenHeader(
-                title = "زكاة الذهب",
-                onBackClick = { viewModel.navigateTo(ScreenType.HOME) },
-                onThemeToggle = { viewModel.toggleDarkMode() },
-                isDarkMode = isDarkMode,
-                testTagPrefix = "zakat"
+                title = "حاسبة زكاة الذهب الشرعية",
+                onBackClick = { viewModel.navigateTo(ScreenType.HOME) }
             )
         }
 
-        // بطاقة حد النصاب الشرعي: الاكتفاء بمعلومة 85 جرام ذهب عيار 24
+        // بطاقة النصاب الشرعي بالأبيض والذهبي بشكل أفقي واسع
         item {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surfaceElevated),
-                border = BorderStroke(1.dp, GoldTheme.colors.goldPrimary.copy(alpha = 0.35f))
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surface),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, GoldTheme.colors.goldPrimary.copy(alpha = 0.5f))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "⚖️", fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "حد النصاب الشرعي",
-                            fontSize = 14.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.goldPrimary
-                        )
-                    }
                     Text(
-                        text = "85 جرام ذهب عيار 24",
-                        fontSize = 13.5.sp,
+                        text = "النصاب الشرعي: 85 جرام عيار 24",
                         fontWeight = FontWeight.Bold,
-                        color = GoldTheme.colors.textPrimary
+                        color = Color.White,
+                        fontSize = 13.5.sp
+                    )
+                    Text(
+                        text = "${GoldPriceFormatter.formatWithGrouping(zakatResult.nisabEgpValue)} ج.م",
+                        fontWeight = FontWeight.Black,
+                        color = GoldTheme.colors.goldPrimary,
+                        fontSize = 14.5.sp
                     )
                 }
             }
         }
 
-        // بطاقة المدخلات: الوزن بالجرام + العيار + شرط مرور سنة (حول كامل)
+        // أزرار اختيار العيار (نظيفة بدون سعر صغير تحتها)
         item {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surface),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, GoldTheme.colors.borderColor)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    availableKarats.forEach { karat ->
+                        val isSelected = karat == zakatKarat
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isSelected) GoldTheme.colors.goldPrimary else GoldTheme.colors.background
+                                )
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) GoldTheme.colors.goldPrimary else GoldTheme.colors.borderColor,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable { viewModel.onZakatKaratSelected(karat) }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "عيار $karat",
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.Black else GoldTheme.colors.textPrimary,
+                                fontSize = 12.5.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // إدخال الوزن وسعر الجرام (مباشر وبدون حشو أو أزرار إضافية)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surface),
+                shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, GoldTheme.colors.borderColor)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // اختيار العيار
-                    Text(
-                        text = "عيار الذهب",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = GoldTheme.colors.textPrimary
-                    )
+                    // وزن الذهب الإجمالي
+                    Column {
+                        Text(
+                            text = "إجمالي وزن الذهب بالجرام:",
+                            fontWeight = FontWeight.Bold,
+                            color = GoldTheme.colors.textPrimary,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = zakatWeight,
+                            onValueChange = { viewModel.onZakatWeightChanged(it) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("zakat_weight_input"),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            placeholder = { Text("أدخل إجمالي الوزن بالجرام...", color = GoldTheme.colors.textSecondary, fontSize = 12.5.sp) },
+                            trailingIcon = {
+                                Text("جم", color = GoldTheme.colors.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(end = 10.dp))
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldTheme.colors.goldPrimary,
+                                unfocusedBorderColor = GoldTheme.colors.borderColor,
+                                focusedTextColor = GoldTheme.colors.textPrimary,
+                                unfocusedTextColor = GoldTheme.colors.textPrimary
+                            )
+                        )
+                    }
 
+                    // سعر جرام البيع المعتمد لحساب الزكاة
+                    Column {
+                        Text(
+                            text = "سعر جرام عيار $zakatKarat المعتمد للزكاة:",
+                            fontWeight = FontWeight.Bold,
+                            color = GoldTheme.colors.textPrimary,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = zakatGramPrice,
+                            onValueChange = { viewModel.onZakatGramPriceChanged(it) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("zakat_gram_price_input"),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            trailingIcon = {
+                                Text("ج.م", color = GoldTheme.colors.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(end = 10.dp))
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldTheme.colors.goldPrimary,
+                                unfocusedBorderColor = GoldTheme.colors.borderColor,
+                                focusedTextColor = GoldTheme.colors.textPrimary,
+                                unfocusedTextColor = GoldTheme.colors.textPrimary
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // الغرض من اقتناء الذهب والضابط الشرعي
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surface),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, GoldTheme.colors.borderColor)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "الغرض والنية من اقتناء الذهب:",
+                        fontWeight = FontWeight.Bold,
+                        color = GoldTheme.colors.goldPrimary,
+                        fontSize = 12.5.sp
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        karats.forEach { karat ->
-                            val isSelected = karat == selectedKarat
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        if (isSelected) GoldTheme.colors.goldPrimary.copy(alpha = 0.18f)
-                                        else GoldTheme.colors.surfaceElevated
-                                    )
-                                    .border(
-                                        width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) GoldTheme.colors.goldPrimary else GoldTheme.colors.borderColor,
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable { selectedKarat = karat }
-                                    .testTag("zakat_karat_$karat"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "$karat",
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
-                                    color = if (isSelected) GoldTheme.colors.goldPrimary else GoldTheme.colors.textSecondary
-                                )
-                            }
+                        // سبائك وادخار واقتناء
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (!zakatIsPersonalJewelry) GoldTheme.colors.goldPrimary else GoldTheme.colors.background)
+                                .border(0.8.dp, if (!zakatIsPersonalJewelry) GoldTheme.colors.goldPrimary else GoldTheme.colors.borderColor, RoundedCornerShape(8.dp))
+                                .clickable { viewModel.onZakatPersonalJewelryChanged(false) }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "سبائك / ادخار واقتناء",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (!zakatIsPersonalJewelry) Color.Black else GoldTheme.colors.textPrimary
+                            )
+                        }
+                        // حُلي نساء للزينة الشخصية
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (zakatIsPersonalJewelry) GoldTheme.colors.goldPrimary else GoldTheme.colors.background)
+                                .border(0.8.dp, if (zakatIsPersonalJewelry) GoldTheme.colors.goldPrimary else GoldTheme.colors.borderColor, RoundedCornerShape(8.dp))
+                                .clickable { viewModel.onZakatPersonalJewelryChanged(true) }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "حُلي نساء للزينة الشخصية",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (zakatIsPersonalJewelry) Color.Black else GoldTheme.colors.textPrimary
+                            )
                         }
                     }
 
-                    // الوزن بالجرام
-                    Text(
-                        text = "الوزن الإجمالي بالجرام",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = GoldTheme.colors.textPrimary
-                    )
-
-                    OutlinedTextField(
-                        value = weightInput,
-                        onValueChange = { weightInput = it.filter { c -> c.isDigit() || c == '.' } },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("zakat_weight_input"),
-                        placeholder = { Text("أدخل وزن الذهب بالجرام (مثال: 100)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GoldTheme.colors.goldPrimary,
-                            unfocusedBorderColor = GoldTheme.colors.borderColor,
-                            focusedTextColor = GoldTheme.colors.textPrimary,
-                            unfocusedTextColor = GoldTheme.colors.textPrimary
-                        )
-                    )
-
-                    // معلومات السعر المعتمد
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "سعر بيع جرام عيار $selectedKarat:",
-                            fontSize = 12.sp,
-                            color = GoldTheme.colors.textSecondary
-                        )
-                        Text(
-                            text = "${numberFormatter.format(Math.round(chosenKaratSellPrice))} ج.م",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.textPrimary
-                        )
-                    }
-
-                    if (weight > 0.0) {
+                    if (zakatIsPersonalJewelry) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(GoldTheme.colors.background)
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "إجمالي قيمة الذهب:",
-                                fontSize = 12.sp,
-                                color = GoldTheme.colors.textSecondary
-                            )
-                            Text(
-                                text = "${numberFormatter.format(Math.round(totalValue))} ج.م",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldTheme.colors.textPrimary
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = GoldTheme.colors.borderColor.copy(alpha = 0.5f))
-
-                    // شرط مرور سنة هجرية (الحول)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(GoldTheme.colors.surfaceElevated.copy(alpha = 0.5f))
-                            .clickable { hasPassedOneHijriYear = !hasPassedOneHijriYear }
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = hasPassedOneHijriYear,
-                            onCheckedChange = { hasPassedOneHijriYear = it },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = GoldTheme.colors.goldPrimary,
-                                checkmarkColor = Color.Black
-                            ),
-                            modifier = Modifier.testTag("zakat_hawl_checkbox")
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "مر عليه عام هجري كامل (الحول)؟",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldTheme.colors.textPrimary
-                            )
-                            Text(
-                                text = if (hasPassedOneHijriYear) "نعم، مر عليه حول كامل في حيازتك" else "لا، لم يمر عام هجري حتى الآن",
-                                fontSize = 11.5.sp,
-                                color = if (hasPassedOneHijriYear) GoldTheme.colors.goldPrimary else GoldTheme.colors.textSecondary
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "إخراج الزكاة تورعاً واحتياطاً:",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = GoldTheme.colors.textPrimary
+                                )
+                                Text(
+                                    text = "خروجاً من خلاف السادة الحنفية (مستحب)",
+                                    fontSize = 10.sp,
+                                    color = GoldTheme.colors.textSecondary
+                                )
+                            }
+                            Switch(
+                                checked = zakatPayJewelryWaraa,
+                                onCheckedChange = { viewModel.onZakatPayJewelryWaraaChanged(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.Black,
+                                    checkedTrackColor = GoldTheme.colors.goldPrimary
+                                )
                             )
                         }
                     }
@@ -318,123 +390,259 @@ fun ZakatScreen(
             }
         }
 
-        // نتيجة الزكاة المعتمدة نصياً
+        // شرط الحول الشرعي (مر عليه عام كامل أو لم يمر)
         item {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isZakatDue) GoldTheme.colors.success.copy(alpha = 0.12f)
-                    else GoldTheme.colors.surfaceElevated
-                ),
-                border = BorderStroke(
-                    1.dp,
-                    if (isZakatDue) GoldTheme.colors.success.copy(alpha = 0.5f)
-                    else GoldTheme.colors.borderColor
-                )
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surface),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, GoldTheme.colors.borderColor)
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (weight <= 0.0) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "أدخل وزن الذهب لحساب الزكاة",
-                            fontSize = 13.5.sp,
-                            color = GoldTheme.colors.textSecondary,
-                            textAlign = TextAlign.Center
-                        )
-                    } else if (!reachedNisab) {
-                        Text(
-                            text = "لا زكاة — أقل من النصاب",
-                            fontSize = 16.sp,
+                            text = "مرور عام هجري كامل (الحول الشرعي):",
                             fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.danger,
-                            textAlign = TextAlign.Center
+                            color = GoldTheme.colors.textPrimary,
+                            fontSize = 12.5.sp
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "قيمة الذهب (${numberFormatter.format(Math.round(totalValue))} ج.م) أقل من حد النصاب الشرعي (${numberFormatter.format(Math.round(nisab))} ج.م)",
-                            fontSize = 11.5.sp,
-                            color = GoldTheme.colors.textSecondary,
-                            textAlign = TextAlign.Center
-                        )
-                    } else if (!hasPassedOneHijriYear) {
-                        Text(
-                            text = "لا تجب الزكاة حالياً — لم يكتمل الحول",
-                            fontSize = 15.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.goldPrimary,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "الذهب بلغ النصاب الشرعي، ولكن من شروط الزكاة أن يمضي عليه عام هجري كامل في ملكيتك.",
-                            fontSize = 11.5.sp,
-                            color = GoldTheme.colors.textSecondary,
-                            textAlign = TextAlign.Center
-                        )
-                    } else {
-                        Text(
-                            text = "الزكاة الواجبة: ${numberFormatter.format(zakatAmount)} ج.م",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            color = GoldTheme.colors.success,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "(بلغ النصاب الشرعي ومر الحول: يُخرج 2.5% من إجمالي القيمة)",
-                            fontSize = 12.sp,
-                            color = GoldTheme.colors.textSecondary,
-                            textAlign = TextAlign.Center
+                            text = if (zakatIsHawlMet) "نعم، مر عليه عام كامل" else "لا، لم يمر عليه عام بعد",
+                            color = if (zakatIsHawlMet) GoldTheme.colors.success else GoldTheme.colors.warning,
+                            fontSize = 11.sp
                         )
                     }
+                    Switch(
+                        checked = zakatIsHawlMet,
+                        onCheckedChange = { viewModel.onZakatHawlChanged(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.Black,
+                            checkedTrackColor = GoldTheme.colors.goldPrimary
+                        )
+                    )
                 }
             }
         }
 
-        // نقطة توضيح الحكم الشرعي في النهاية
+        // بطاقة النتيجة وحساب الزكاة والحكم الشرعي تحت خالص
         item {
+            val status = zakatResult.status
+            val isDue = status == ZakatStatus.ZAKAT_DUE
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .testTag("zakat_calculation_result_card"),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = GoldTheme.colors.surface),
-                border = BorderStroke(1.dp, GoldTheme.colors.borderColor)
+                border = BorderStroke(1.2.dp, if (isDue) GoldTheme.colors.goldPrimary else GoldTheme.colors.borderColor)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "📖", fontSize = 15.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
+                    if (isDue) {
+                        // إجمالي الزكاة الواجبة نقدياً: الكلمة فوق وتحتها الرقم وواضح
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GoldTheme.colors.goldPrimary.copy(alpha = 0.12f))
+                                .border(1.dp, GoldTheme.colors.goldPrimary.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                .padding(vertical = 12.dp, horizontal = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = if (zakatIsPersonalJewelry && zakatPayJewelryWaraa)
+                                    "مقدار الزكاة المُخرجة تورعاً واحتياطاً (2.5%)"
+                                else
+                                    "مقدار الزكاة الواجب إخراجها نقدياً (2.5% ربع العُشر)",
+                                fontWeight = FontWeight.Bold,
+                                color = GoldTheme.colors.textPrimary,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = "${GoldPriceFormatter.formatWithGrouping(zakatResult.zakatAmountMoney)} ج.م",
+                                fontWeight = FontWeight.Black,
+                                color = GoldTheme.colors.goldPrimary,
+                                fontSize = 25.sp
+                            )
+                            Text(
+                                text = "أو إخراجها عيناً: ${String.format(java.util.Locale.US, "%.2f", zakatResult.zakatAmountGrams)} جم عيار $zakatKarat",
+                                fontWeight = FontWeight.SemiBold,
+                                color = GoldTheme.colors.textSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        HorizontalDivider(color = GoldTheme.colors.borderColor)
+                    } else {
+                        // حالة عدم الوجوب مع بيان شيك للحكم والسبب
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GoldTheme.colors.surfaceElevated)
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = when (status) {
+                                    ZakatStatus.EXEMPT_PERSONAL_JEWELRY -> "⚪ معفي من الزكاة شرعاً (حُلي زينة شخصية)"
+                                    ZakatStatus.HAWL_NOT_MET -> "🟡 لا تجب الزكاة (الحول لم يكتمل بعد)"
+                                    ZakatStatus.BELOW_NISAB -> "🔴 لا تجب الزكاة (أقل من النصاب الشرعي)"
+                                    else -> "حاسبة الزكاة الشرعية"
+                                },
+                                color = when (status) {
+                                    ZakatStatus.EXEMPT_PERSONAL_JEWELRY -> GoldTheme.colors.goldPrimary
+                                    ZakatStatus.HAWL_NOT_MET -> GoldTheme.colors.warning
+                                    ZakatStatus.BELOW_NISAB -> GoldTheme.colors.danger
+                                    else -> GoldTheme.colors.textPrimary
+                                },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = when (status) {
+                                    ZakatStatus.EXEMPT_PERSONAL_JEWELRY -> "السبب الشرعي: مذهب جمهور فقهاء المسلمين (المالكية والشافعية والحنابلة) أن حُلي المرأة المتخذ للزينة المباحة والاستعمال الشخصي المعتاد لا زكاة فيه لعدم قصد النماء. ويمكنك تفعيل خيار التورع بالأعلى لإخراجها احتياطاً."
+                                    ZakatStatus.HAWL_NOT_MET -> "السبب الشرعي: شرط حولان الحول (مرور عام هجري كامل) لم يكتمل بعد على امتلاك الذهب، ومرور الحول شرط وجوب أساسي في زكاة الذهب."
+                                    ZakatStatus.BELOW_NISAB -> "السبب الشرعي: إجمالي الذهب الصافي الخالص (${String.format(java.util.Locale.US, "%.1f", zakatResult.pureGoldEquivalent)} جم عيار 24) لم يبلغ النصاب الشرعي وهو 85 جرام ذهب خالص (متبقي لبلوغ النصاب: ${String.format(java.util.Locale.US, "%.1f", zakatResult.differenceToNisab)} جم عيار $zakatKarat)."
+                                    else -> "يرجى إدخال وزن الذهب لتحديد الحكم الشرعي ومقدار الزكاة بدقة."
+                                },
+                                color = GoldTheme.colors.textSecondary,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+
+                        HorizontalDivider(color = GoldTheme.colors.borderColor)
+                    }
+
+                    // تفاصيل الحساب
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("الوزن الإجمالي المدخل:", color = GoldTheme.colors.textSecondary, fontSize = 12.sp)
                         Text(
-                            text = "توضيح الحكم الشرعي لزكاة الذهب",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldTheme.colors.goldPrimary
+                            text = "${zakatWeight.ifBlank { "0" }} جم (عيار $zakatKarat)",
+                            fontWeight = FontWeight.SemiBold,
+                            color = GoldTheme.colors.textPrimary,
+                            fontSize = 12.sp
                         )
                     }
 
-                    Text(
-                        text = "1. حد النصاب: هو 85 جرامًا من الذهب الخالص عيار 24 (أو ما يعادل قيمته من العيارات الأخرى كـ 97.14 جرام لعيار 21 أو 113.3 جرام لعيار 18).\n" +
-                                "2. مرور الحول: يشترط أن يمر عام هجري كامل على بلوغ النصاب وهو في ملكك الفعلي.\n" +
-                                "3. مقدار الزكاة: ربع العشر (2.5%) يُحسب من القيمة السوقية الحالية للذهب وقت إخراج الزكاة.\n" +
-                                "4. ذهب الزينة المباح للمرأة: عند جمهور الفقهاء ليس فيه زكاة إذا كان للاستعمال الشخصي المعتاد، وتجب الزكاة عند الحنفية ومن احتاط، كما تجب اتفاقاً فيما كان للادخار أو التجارة.",
-                        fontSize = 11.5.sp,
-                        color = GoldTheme.colors.textSecondary,
-                        lineHeight = 18.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("المعادل من الذهب الصافي (عيار 24):", color = GoldTheme.colors.textSecondary, fontSize = 12.sp)
+                        Text(
+                            text = "${String.format(java.util.Locale.US, "%.2f", zakatResult.pureGoldEquivalent)} جم (النصاب: 85 جم)",
+                            fontWeight = FontWeight.SemiBold,
+                            color = GoldTheme.colors.textPrimary,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("إجمالي القيمة التقديرية للذهب:", color = GoldTheme.colors.textSecondary, fontSize = 12.sp)
+                        Text(
+                            text = "${GoldPriceFormatter.formatWithGrouping(zakatResult.totalGoldValue)} ج.م",
+                            fontWeight = FontWeight.SemiBold,
+                            color = GoldTheme.colors.textPrimary,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    // الحكم الشرعي تحت خالص
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(GoldTheme.colors.background)
+                            .border(0.8.dp, GoldTheme.colors.borderColor, RoundedCornerShape(8.dp))
+                            .padding(10.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "⚖️ خلاصة الحكم الشرعي:",
+                                fontWeight = FontWeight.Bold,
+                                color = GoldTheme.colors.goldPrimary,
+                                fontSize = 11.5.sp
+                            )
+                            Text(
+                                text = zakatResult.reasonMessage.ifBlank {
+                                    if (isDue) "تجب فيه الزكاة شرعاً (بلغ النصاب وحال عليه الحول - ربع العُشر 2.5%)."
+                                    else "لا تجب فيه الزكاة لعدم توفر شروط الوجوب كاملة."
+                                },
+                                color = GoldTheme.colors.textPrimary,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // أزرار الإجراءات: مشاركة التقرير (شير فقط بدون واتساب منفصل)، وحفظ في السجل، ومسح
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // زر مشاركة التقرير بالشير
+                Button(
+                    onClick = { viewModel.shareZakatResult(context) },
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .height(42.dp)
+                        .testTag("zakat_share_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldTheme.colors.surface),
+                    border = BorderStroke(1.dp, GoldTheme.colors.goldPrimary),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("📤 مشاركة التقرير", color = GoldTheme.colors.goldPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+
+                // حفظ في السجل
+                Button(
+                    onClick = { showSaveDialog = true },
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .height(42.dp)
+                        .testTag("zakat_save_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldTheme.colors.goldPrimary),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("💾 حفظ السجل", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+
+                // مسح وإعادة ضبط
+                Button(
+                    onClick = { viewModel.resetZakatForm() },
+                    modifier = Modifier
+                        .weight(0.7f)
+                        .height(42.dp)
+                        .testTag("zakat_reset_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldTheme.colors.surface),
+                    border = BorderStroke(1.dp, GoldTheme.colors.borderColor),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("🔄 مسح", color = GoldTheme.colors.textSecondary, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
                 }
             }
         }

@@ -40,10 +40,15 @@ import java.text.DecimalFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.example.goldfeed.GoldPriceFeed
+import com.example.goldfeed.GoldPriceCalculator
+import com.example.goldfeed.PriceStatusService
 
 class GoldViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = GoldRepository(application)
+    val goldPriceFeed = GoldPriceFeed.getInstance(application)
+    val feedStatusInfo: StateFlow<PriceStatusService.FeedStatusInfo> = goldPriceFeed.statusInfo
     private val decimalFormat = DecimalFormat("#,##0.##", DecimalFormatSymbols(Locale.US))
 
     // Theme Mode (Default: true = Dark Theme - الهوية اللونية الداكنة القديمة)
@@ -63,8 +68,43 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Navigation State
-    private val _currentScreen = MutableStateFlow(ScreenType.HOME)
+    private val _currentScreen = MutableStateFlow(ScreenType.PRICES)
     val currentScreen: StateFlow<ScreenType> = _currentScreen.asStateFlow()
+
+    // --- EXACT LIVE PRICING ENGINE STATE (SPEC SECTIONS 1-7) ---
+    private val _exactLivePrices = MutableStateFlow<com.example.data.remote.provider.ExactLivePricingEngine.CalculatedPrices?>(null)
+    val exactLivePrices: StateFlow<com.example.data.remote.provider.ExactLivePricingEngine.CalculatedPrices?> = _exactLivePrices.asStateFlow()
+
+    private val _isDisconnected = MutableStateFlow(false)
+    val isDisconnected: StateFlow<Boolean> = _isDisconnected.asStateFlow()
+
+    private val _isRetrying = MutableStateFlow(false)
+    val isRetrying: StateFlow<Boolean> = _isRetrying.asStateFlow()
+
+    private val _topBarStatusText = MutableStateFlow("السوق مفتوح • مباشر")
+    val topBarStatusText: StateFlow<String> = _topBarStatusText.asStateFlow()
+
+    private val _flashingKarats = MutableStateFlow<Map<Int, PriceDirection>>(emptyMap())
+    val flashingKarats: StateFlow<Map<Int, PriceDirection>> = _flashingKarats.asStateFlow()
+
+    // Settings (Section 9)
+    val flashThreshold = MutableStateFlow(3.0)
+    val defaultDamagePercent = MutableStateFlow(0.0)
+    val soundAlertsEnabled = MutableStateFlow(true)
+    val notificationsAlertsEnabled = MutableStateFlow(true)
+
+    // Buy Screen Inputs (Section 5)
+    val exactBuyWeight = MutableStateFlow("")
+    val exactBuyKarat = MutableStateFlow(21)
+
+    // Sell Screen Inputs (Section 6)
+    val exactSellWeight = MutableStateFlow("")
+    val exactSellKarat = MutableStateFlow(21)
+    val exactSellDamagedPercent = MutableStateFlow("0")
+
+    // Zakat Screen Inputs (Section 7)
+    val exactZakatWeight = MutableStateFlow("")
+    val exactZakatKarat = MutableStateFlow(21)
 
     // Connectivity
     val isOnline: StateFlow<Boolean> = repository.isOnlineFlow.stateIn(
@@ -311,9 +351,152 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
             googleSheetUrlInput.value = loadedAdmin.googleSheetUrl
             _lastGoogleSheetSyncText.value = loadedAdmin.lastGoogleSheetSyncTime.ifBlank { "2026-09-13 10:27" }
 
-            // Start 30-second live market updates and fetch real-time Egyptian market prices
-            startPeriodicPriceUpdates()
+            // Start 60-second automated official feed polling
+            goldPriceFeed.startAutoRefresh()
             refreshPrices(silent = true, forceRefresh = true)
+        }
+
+        // الاستماع الدائم لتدفق الأسعار اللحظي المحسوب من GoldPriceFeed
+        viewModelScope.launch {
+            goldPriceFeed.liveResponse.collect { newResponse ->
+                if (newResponse.gram21.buy > 0.0) {
+                    val currentDisplayedBuy21 = _goldPriceResponse.value.gram21.buy
+                    val newBuy21 = newResponse.gram21.buy
+                    val diffEGP = if (currentDisplayedBuy21 > 100.0) newBuy21 - currentDisplayedBuy21 else 0.0
+
+                    if (currentDisplayedBuy21 > 100.0 && kotlin.math.abs(diffEGP) >= 3.0) {
+                        _priceDiffEGP.value = diffEGP
+                        _priceDirection.value = if (diffEGP > 0) PriceDirection.UP else PriceDirection.DOWN
+                        _isPriceFlashing.value = true
+                        viewModelScope.launch {
+                            delay(1800L)
+                            _isPriceFlashing.value = false
+                        }
+                        val admin = _marketAdminSettings.value
+                        SoundAlertManager.playPriceChangeAlert(
+                            context = getApplication(),
+                            isIncrease = diffEGP > 0,
+                            enableSound = admin.soundAlertEnabled,
+                            enableVibration = admin.vibrationEnabled
+                        )
+                    }
+
+                    _goldPriceResponse.value = newResponse
+                    _goldPrices.value = newResponse.toGoldPriceList()
+                    _priceSourceTitle.value = newResponse.source
+                    _isLivePrice.value = (newResponse.status == "live" || newResponse.status == "live_feed")
+                    _lastUpdatedText.value = newResponse.lastUpdated
+
+                    updateBuyPriceForSelectedKarat()
+                    updateSellPriceForSelectedKarat()
+                    updateZakatPriceForSelectedKarat()
+                    recalculateBuy()
+                    recalculateSell()
+                    recalculateZakat()
+                    recalculateTraderComparison()
+                }
+            }
+        }
+    }
+
+    private var exactPollingJob: Job? = null
+    private val exactBackoffDelaysSec = listOf(30L, 60L, 120L, 300L)
+    private var exactBackoffIndex = 0
+
+    fun startExactPollingLoop() {
+        exactPollingJob?.cancel()
+        exactPollingJob = viewModelScope.launch {
+            while (isActive) {
+                var success = false
+                try {
+                    val (xau, updatedAt) = com.example.data.remote.provider.ExactLivePricingEngine.fetchLiveXau()
+                    val usdRate = com.example.data.remote.provider.ExactLivePricingEngine.getOrFetchOfficialUsdRate(getApplication())
+                    val computed = com.example.data.remote.provider.ExactLivePricingEngine.computePricing(xau, updatedAt, usdRate)
+
+                    val old = _exactLivePrices.value
+                    if (old != null) {
+                        val newFlashes = mutableMapOf<Int, PriceDirection>()
+                        for (k in listOf(24, 22, 21, 18, 14)) {
+                            val oldBuy = old.karatPrices[k]?.first ?: 0L
+                            val newBuy = computed.karatPrices[k]?.first ?: 0L
+                            val diff = newBuy - oldBuy
+                            if (diff >= flashThreshold.value) {
+                                newFlashes[k] = PriceDirection.UP
+                            } else if (diff <= -flashThreshold.value) {
+                                newFlashes[k] = PriceDirection.DOWN
+                            }
+                        }
+                        if (newFlashes.isNotEmpty()) {
+                            _flashingKarats.value = newFlashes
+                            viewModelScope.launch {
+                                delay(1000L) // 1 second flash exactly
+                                _flashingKarats.value = emptyMap()
+                            }
+                            if (soundAlertsEnabled.value) {
+                                val hasUp = newFlashes.values.any { it == PriceDirection.UP }
+                                SoundAlertManager.playPriceChangeAlert(
+                                    context = getApplication(),
+                                    isIncrease = hasUp,
+                                    enableSound = true,
+                                    enableVibration = false
+                                )
+                            }
+                        }
+                    }
+
+                    _exactLivePrices.value = computed
+                    _isDisconnected.value = false
+                    _isRetrying.value = false
+                    _topBarStatusText.value = "السوق مفتوح • مباشر"
+                    _lastUpdatedText.value = computed.lastUpdatedTimeDisplay
+                    exactBackoffIndex = 0
+                    success = true
+                } catch (e: Exception) {
+                    android.util.Log.e("ExactPricing", "Network error fetching live price: ${e.message}")
+                    _isDisconnected.value = true
+                    _topBarStatusText.value = "انقطع الاتصال"
+                    success = false
+                }
+
+                val waitSec = if (success) {
+                    30L
+                } else {
+                    _isRetrying.value = true
+                    val delayVal = exactBackoffDelaysSec[exactBackoffIndex.coerceAtMost(exactBackoffDelaysSec.size - 1)]
+                    if (exactBackoffIndex < exactBackoffDelaysSec.size - 1) exactBackoffIndex++
+                    delayVal
+                }
+                delay(waitSec * 1000L)
+            }
+        }
+    }
+
+    fun saveExactReceipt(
+        type: String,
+        weight: Double,
+        karat: Int,
+        pricePerGram: Long,
+        totalAmount: Long,
+        damagedPercent: Double = 0.0
+    ) {
+        viewModelScope.launch {
+            val randomNum = (100000..999999).random()
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale("ar", "EG"))
+            val nowStr = sdf.format(Date())
+
+            val entity = TransactionEntity(
+                type = if (type == "شراء") "BUY" else "SELL",
+                karat = karat,
+                weight = weight,
+                pricePerGram = pricePerGram.toDouble(),
+                totalFairPrice = totalAmount.toDouble(),
+                receiptId = "#$randomNum",
+                formattedDate = nowStr,
+                deductionPercent = damagedPercent,
+                note = "إيصال $type لحظي"
+            )
+            repository.saveTransaction(entity)
+            _toastEvent.emit("✅ تم حفظ الإيصال رقم #$randomNum بنجاح")
         }
     }
 
@@ -641,7 +824,8 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
             if (!silent) _isRefreshing.value = true
             try {
                 val currentDisplayedBuy21 = _goldPriceResponse.value.gram21.buy
-                val fullResponse = repository.getLiveGoldPriceResponse(forceRefresh)
+                goldPriceFeed.refreshNow(forceRefresh = true)
+                val fullResponse = goldPriceFeed.liveResponse.value
 
                 // 1. Assertion: شراء دائماً أكبر من بيع
                 if (fullResponse.gram21.buy <= fullResponse.gram21.sell) {
@@ -1485,6 +1669,13 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
         recalculateZakat()
     }
 
+    fun addZakatWeight(extra: Double) {
+        val current = parseNumber(zakatWeight.value)
+        val newWeight = current + extra
+        zakatWeight.value = if (newWeight % 1.0 == 0.0) newWeight.toLong().toString() else decimalFormat.format(newWeight)
+        recalculateZakat()
+    }
+
     fun onZakatHawlChanged(isMet: Boolean) {
         zakatIsHawlMet.value = isMet
         recalculateZakat()
@@ -1531,6 +1722,9 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
         val weight = parseNumber(zakatWeight.value)
         val karat = zakatKarat.value
         val live = _goldPriceResponse.value
+        val isHawl = zakatIsHawlMet.value
+        val isPersonal = zakatIsPersonalJewelry.value
+        val payWaraa = zakatPayJewelryWaraa.value
 
         // سعر جرام عيار 24 للبيع المعتمد للنصاب الشرعي
         val sell24 = if (live.gram24.sell > 0.0) live.gram24.sell else Math.round((live.gram21.sell / 0.9976) * (24.0 / 21.0) * 0.9976).toDouble()
@@ -1543,8 +1737,9 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
             zakatGramPrice.value = Math.round(gramPrice).toString()
         }
 
+        val pureEquivalent = weight * (karat.toDouble() / 24.0)
         val userGoldValue = weight * gramPrice
-        val isAboveNisab = userGoldValue >= nisabThresholdMoney
+        val isAboveNisab = userGoldValue >= nisabThresholdMoney || pureEquivalent >= 85.0
 
         if (weight <= 0.0) {
             _zakatResult.value = ZakatCalculationResult(
@@ -1555,80 +1750,138 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
                 differenceToNisab = 85.0,
                 gramPrice = gramPrice,
                 totalGoldValue = 0.0,
+                isHawlMet = isHawl,
+                isPersonalJewelry = isPersonal,
+                payWaraa = payWaraa,
                 zakatAmountMoney = 0.0,
                 zakatAmountGrams = 0.0,
                 status = ZakatStatus.NONE,
                 reasonMessage = "أدخل وزن الذهب بالجرام للتحقق من بلوغ النصاب وحساب الزكاة.",
                 nisabEgpValue = nisabThresholdMoney,
                 sellPrice24k = sell24,
-                priceSourceNote = "إدخال يدوي بواسطة المستخدم"
+                priceSourceNote = "سعر السوق المعتمد"
+            )
+            return
+        }
+
+        if (!isHawl) {
+            _zakatResult.value = ZakatCalculationResult(
+                karat = karat,
+                totalWeight = weight,
+                pureGoldEquivalent = pureEquivalent,
+                nisabThreshold = 85.0,
+                differenceToNisab = if (pureEquivalent < 85.0) (85.0 - pureEquivalent) else 0.0,
+                gramPrice = gramPrice,
+                totalGoldValue = userGoldValue,
+                isHawlMet = false,
+                isPersonalJewelry = isPersonal,
+                payWaraa = payWaraa,
+                zakatAmountMoney = 0.0,
+                zakatAmountGrams = 0.0,
+                status = ZakatStatus.HAWL_NOT_MET,
+                reasonMessage = "لا تجب الزكاة — لم يمضِ عليه عام هجري كامل (مرور الحول شرط أساسي لوجوب الزكاة).",
+                nisabEgpValue = nisabThresholdMoney,
+                sellPrice24k = sell24,
+                priceSourceNote = "سعر السوق المعتمد"
             )
             return
         }
 
         if (!isAboveNisab) {
+            val diffGrams = (85.0 - pureEquivalent) * (24.0 / karat.toDouble())
             _zakatResult.value = ZakatCalculationResult(
                 karat = karat,
                 totalWeight = weight,
-                pureGoldEquivalent = weight * (karat.toDouble() / 24.0),
+                pureGoldEquivalent = pureEquivalent,
                 nisabThreshold = 85.0,
-                differenceToNisab = if (gramPrice > 0.0) ((nisabThresholdMoney - userGoldValue) / gramPrice).coerceAtLeast(0.0) else 0.0,
+                differenceToNisab = diffGrams.coerceAtLeast(0.0),
                 gramPrice = gramPrice,
                 totalGoldValue = userGoldValue,
+                isHawlMet = true,
+                isPersonalJewelry = isPersonal,
+                payWaraa = payWaraa,
                 zakatAmountMoney = 0.0,
                 zakatAmountGrams = 0.0,
                 status = ZakatStatus.BELOW_NISAB,
-                reasonMessage = "مفيش زكاة — أقل من النصاب",
+                reasonMessage = "لا تجب الزكاة — الذهب لم يبلغ النصاب الشرعي (أقل من 85 جرام عيار 24).",
                 nisabEgpValue = nisabThresholdMoney,
                 sellPrice24k = sell24,
-                priceSourceNote = "إدخال يدوي بواسطة المستخدم"
+                priceSourceNote = "سعر السوق المعتمد"
             )
-        } else {
-            val zakatMoney = Math.round(userGoldValue * 0.025).toDouble()
-            val zakatGrams = weight * 0.025
+            return
+        }
 
+        if (isPersonal && !payWaraa) {
             _zakatResult.value = ZakatCalculationResult(
                 karat = karat,
                 totalWeight = weight,
-                pureGoldEquivalent = weight * (karat.toDouble() / 24.0),
+                pureGoldEquivalent = pureEquivalent,
                 nisabThreshold = 85.0,
                 differenceToNisab = 0.0,
                 gramPrice = gramPrice,
                 totalGoldValue = userGoldValue,
-                zakatAmountMoney = zakatMoney,
-                zakatAmountGrams = zakatGrams,
-                status = ZakatStatus.ZAKAT_DUE,
-                reasonMessage = "تجب فيه الزكاة (تجاوز النصاب الشرعي)",
+                isHawlMet = isHawl,
+                isPersonalJewelry = true,
+                payWaraa = false,
+                zakatAmountMoney = 0.0,
+                zakatAmountGrams = 0.0,
+                status = ZakatStatus.EXEMPT_PERSONAL_JEWELRY,
+                reasonMessage = "لا تجب الزكاة — حُلي المرأة المعدّ للزينة والاستعمال المعتاد معفي من الزكاة عند جمهور الفقهاء (المالكية والشافعية والحنابلة).",
                 nisabEgpValue = nisabThresholdMoney,
                 sellPrice24k = sell24,
-                priceSourceNote = "إدخال يدوي بواسطة المستخدم"
+                priceSourceNote = "سعر السوق المعتمد"
             )
+            return
         }
+
+        val zakatMoney = Math.round(userGoldValue * 0.025).toDouble()
+        val zakatGrams = weight * 0.025
+        val reason = if (isPersonal && payWaraa) {
+            "إخراج الزكاة تورعاً واحتياطاً في حُلي الزينة (خروجاً من خلاف السادة الحنفية - 2.5% ربع العُشر)"
+        } else {
+            "تجب فيه الزكاة شرعاً (بلغ النصاب وحال عليه الحول - 2.5% ربع العُشر)"
+        }
+
+        _zakatResult.value = ZakatCalculationResult(
+            karat = karat,
+            totalWeight = weight,
+            pureGoldEquivalent = pureEquivalent,
+            nisabThreshold = 85.0,
+            differenceToNisab = 0.0,
+            gramPrice = gramPrice,
+            totalGoldValue = userGoldValue,
+            isHawlMet = true,
+            isPersonalJewelry = isPersonal,
+            payWaraa = payWaraa,
+            zakatAmountMoney = zakatMoney,
+            zakatAmountGrams = zakatGrams,
+            status = ZakatStatus.ZAKAT_DUE,
+            reasonMessage = reason,
+            nisabEgpValue = nisabThresholdMoney,
+            sellPrice24k = sell24,
+            priceSourceNote = "سعر السوق المعتمد"
+        )
     }
 
     fun buildZakatShareMessage(): String {
         val res = _zakatResult.value
 
         return buildString {
-            appendLine("🕌 *حساب زكاة الذهب*")
-            appendLine("حساب زكاة الذهب فقط لا غير")
+            appendLine("🕌 *تقرير زكاة الذهب - تطبيق حارس الذهب*")
             appendLine("━━━━━━━━━━━━━━━━━━━")
             appendLine("⚜️ العيار: عيار ${res.karat}")
             appendLine("⚖️ الوزن: ${decimalFormat.format(res.totalWeight)} جرام")
-            appendLine("💵 سعر الجرام للبيع المعتمد: ${formatPrice(res.gramPrice)} ج.م (${res.priceSourceNote})")
+            appendLine("✨ المعادل عيار 24: ${decimalFormat.format(res.pureGoldEquivalent)} جرام")
+            appendLine("💵 سعر الجرام للبيع المعتمد: ${formatPrice(res.gramPrice)} ج.م")
             appendLine("💰 قيمة الذهب الإجمالية: ${formatPrice(res.totalGoldValue)} ج.م")
-            appendLine("📐 النصاب الشرعي (85 جرام عيار 24): ${formatPrice(res.nisabEgpValue)} ج.م (سعر عيار 24 بيع: ${formatPrice(res.sellPrice24k)} ج.م)")
+            appendLine("📐 النصاب الشرعي (85 جم عيار 24): ${formatPrice(res.nisabEgpValue)} ج.م")
+            appendLine("⏳ مرور الحول الهجري: ${if (res.isHawlMet) "نعم (مر عليه عام كامل)" else "لا (لم يمر عليه عام)"}")
             appendLine("━━━━━━━━━━━━━━━━━━━")
-            when (res.status) {
-                ZakatStatus.BELOW_NISAB -> {
-                    appendLine("🔴 *مفيش زكاة — أقل من النصاب*")
-                }
-                ZakatStatus.ZAKAT_DUE -> {
-                    appendLine("🟢 *تجب فيه الزكاة (2.5% - ربع العُشر)*")
-                    appendLine("💰 *الزكاة المستحقة: ${formatPrice(res.zakatAmountMoney)} ج.م*")
-                    appendLine("أو إخراج عيناً: ${decimalFormat.format(res.zakatAmountGrams)} جرام عيار ${res.karat}")
-                }
-                else -> {}
+            appendLine("📋 *الحكم الشرعي والنتيجة:*")
+            appendLine(res.reasonMessage)
+            if (res.status == ZakatStatus.ZAKAT_DUE) {
+                appendLine("💰 *مبلغ الزكاة المستحق: ${formatPrice(res.zakatAmountMoney)} ج.م*")
+                appendLine("🪙 أو إخراج عيناً: ${decimalFormat.format(res.zakatAmountGrams)} جرام عيار ${res.karat}")
             }
             appendLine("━━━━━━━━━━━━━━━━━━━")
             appendLine("التاريخ: ${_lastUpdatedText.value}")
@@ -1697,5 +1950,10 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
         val price = _goldPriceResponse.value.getPairForKarat(karat).buy.takeIf { it > 0 }
             ?: (6315.0 * (karat / 21.0))
         return grams * price
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        goldPriceFeed.stopAutoRefresh()
     }
 }

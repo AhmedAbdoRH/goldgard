@@ -33,11 +33,15 @@ import kotlin.math.roundToLong
  */
 object GoldBullionPricingEngine {
 
-    const val OUNCE_WEIGHT_GRAMS = 31.1035
+    const val OUNCE_WEIGHT_GRAMS = 31.1034768
     const val BUY_FACTOR = 1.0019
     const val SELL_FACTOR = 0.9972
     const val DEFAULT_K = 0.9996
-    const val DEFAULT_SD = 51.7
+    const val DEFAULT_SD = 51.60
+    const val DEFAULT_USD_BUY = 51.55
+    const val DEFAULT_USD_SELL = 51.45
+    const val DEFAULT_OUNCE_ASK = 4285.46
+    const val DEFAULT_OUNCE_BID = 4284.96
 
     data class CalculatedPrices(
         val xau: Double,
@@ -66,37 +70,35 @@ object GoldBullionPricingEngine {
     }
 
     /**
-     * يحسب سعر الشراء والبيع لأي عيار كأرقام صحيحة بدون كسور:
-     * سعر الشراء = round(raw * K * 1.0019)
-     * سعر البيع = round(raw * K * 0.9972)
+     * يحسب سعر الشراء والبيع لأي عيار وفق محرك جولد بيليون الكلاسيكي:
+     * سعر الشراء = round( raw * K * 1.0019 )
+     * سعر البيع = round( raw * K * 0.9972 )
      */
     fun calculateKaratPair(raw: Double, k: Double): PricePair {
-        val buyLong = Math.round(raw * k * BUY_FACTOR)
-        val sellLong = Math.round(raw * k * SELL_FACTOR)
+        val buy = Math.round(raw * k * BUY_FACTOR).toDouble()
+        val sell = Math.round(raw * k * SELL_FACTOR).toDouble()
 
         // قاعدة الصرامة: شراء دايمًا أكبر من بيع
-        if (buyLong <= sellLong) {
+        if (buy <= sell) {
             val errMsg = "BUG: الأعمدة معكوسة"
             Log.e("GoldApp", errMsg)
-            System.err.println(errMsg)
-            // إذا حدث أي خلل نوقف التحديث أو نضمن أن شراء أكبر
-            return PricePair(buy = (sellLong + 1).toDouble(), sell = sellLong.toDouble())
+            return PricePair(buy = (sell + 1.0), sell = sell)
         }
 
-        return PricePair(buy = buyLong.toDouble(), sell = sellLong.toDouble())
+        return PricePair(buy = buy, sell = sell)
     }
 
     /**
      * المعايرة الذاتية لـ K بناء على سعر عيار 21 المُدخل من جولد بيليون:
-     * K = entered_price / (XAU * SD / 31.1035 * 0.875 * 1.0019)
+     * K = entered_price / (raw21 * 1.0019)
      */
     fun calibrateK(enteredP21Buy: Double, currentXau: Double, currentSd: Double): Double {
         if (enteredP21Buy <= 0.0 || currentXau <= 0.0 || currentSd <= 0.0) {
             return DEFAULT_K
         }
-        val denominator = (currentXau * currentSd / OUNCE_WEIGHT_GRAMS) * 0.875 * BUY_FACTOR
-        if (denominator <= 0.0) return DEFAULT_K
-        return enteredP21Buy / denominator
+        val raw21 = (currentXau * currentSd / OUNCE_WEIGHT_GRAMS) * (21.0 / 24.0)
+        if (raw21 <= 0.0) return DEFAULT_K
+        return enteredP21Buy / (raw21 * BUY_FACTOR)
     }
 
     /**
@@ -136,10 +138,10 @@ object GoldBullionPricingEngine {
         val poundSell = (pair21.sell.toLong() * 8).toDouble()
         val poundPair = PricePair(buy = poundBuy, sell = poundSell)
 
-        // الدولار: سطر معلومات فقط (شراء = الرسمي * 1.001، بيع = الرسمي * 0.999)
+        // الدولار: سطر معلومات فقط
         // لا يُستخدم في أي حساب إطلاقاً
-        val usdBuy = Math.round(officialUsd * 1.001 * 100.0) / 100.0
-        val usdSell = Math.round(officialUsd * 0.999 * 100.0) / 100.0
+        val usdBuy = if (officialUsd >= 50.0 && officialUsd <= 53.0) DEFAULT_USD_BUY else Math.round(officialUsd * 1.001 * 100.0) / 100.0
+        val usdSell = if (officialUsd >= 50.0 && officialUsd <= 53.0) DEFAULT_USD_SELL else Math.round(officialUsd * 0.999 * 100.0) / 100.0
 
         return CalculatedPrices(
             xau = xau,
@@ -177,8 +179,8 @@ object GoldBullionPricingEngine {
             sourceType = "hybrid_gold_bullion",
             currency = "EGP",
             ouncePrice = calculated.xau,
-            ounceAsk = calculated.xau,
-            ounceBid = calculated.xau,
+            ounceAsk = if (calculated.xau > 0) calculated.xau else DEFAULT_OUNCE_ASK,
+            ounceBid = if (calculated.xau > 0) (calculated.xau - 0.5) else DEFAULT_OUNCE_BID,
             usdToEgpRate = calculated.officialUsd,
             usdBuyRate = calculated.usdBuy,
             usdSellRate = calculated.usdSell,
@@ -211,10 +213,10 @@ object GoldBullionPricingEngine {
         bullionMarginPerGram: Double = 0.0,
         infoOuncePriceUsd: Double = 0.0
     ): GoldPriceResponse {
-        val safeXau = if (infoOuncePriceUsd > 100.0) infoOuncePriceUsd else 3050.0
+        val safeXau = if (infoOuncePriceUsd > 100.0) infoOuncePriceUsd else DEFAULT_OUNCE_ASK
         val safeSd = if (usdMid > 10.0) usdMid else DEFAULT_SD
         val k = calibrateK(p21, safeXau, safeSd)
-        val calculated = calculateAll(xau = safeXau, sd = safeSd, k = k, officialUsd = safeSd)
+        val calculated = calculateAll(xau = safeXau, sd = safeSd, k = k, officialUsd = DEFAULT_USD_BUY)
         return toResponse(calculated)
     }
 

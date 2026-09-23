@@ -5,27 +5,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 // =========================================================================
-// Dark Theme Colors (الهوية اللونية القديمة الداكنة)
+// Dark Theme Colors (الهوية اللونية المحددة بالملي)
 // =========================================================================
-val PaletteBackgroundDark = Color(0xFF0B111E)      // خلفية عامة داكنة فخمة
-val PaletteSurfaceDark = Color(0xFF131D2E)         // بطاقات بلون كحلي فحمي داكن
-val PaletteSurfaceElevatedDark = Color(0xFF1B273D) // طبقة مرتفعة للرؤوس والبطاقات
-val PaletteBorderColorDark = Color(0xFF24344E)     // حدود خافتة غير مزعجة
+val PaletteBackgroundDark = Color(0xFF0A0E1A)      // خلفية #0a0e1a
+val PaletteSurfaceDark = Color(0xFF1A2238)         // بطاقات #1a2238
+val PaletteSurfaceElevatedDark = Color(0xFF222C46) // طبقة مرتفعة
+val PaletteBorderColorDark = Color(0xFF2E3D5E)     // حدود
 
-// Golden Accent Identity (اللون الذهبي الملكي للرموز والعناوين)
-val PaletteGoldPrimary = Color(0xFFD4AF37)         // ذهبي كلاسيكي فاخر
+// Golden Accent Identity (#f4c542)
+val PaletteGoldPrimary = Color(0xFFF4C542)         // ذهبي مميز #f4c542
 val PaletteGoldLight = Color(0xFFFDE68A)           // ذهبي فاتح ناعم
 val PaletteGoldDark = Color(0xFFB45309)            // ذهبي داكن دافئ
-val PaletteGoldWarm = Color(0xFFEAB308)
+val PaletteGoldWarm = Color(0xFFF4C542)
 
 // Text Colors (Dark Mode)
-val PaletteTextPrimaryDark = Color(0xFFFFFFFF)     // نصوص رئيسية بيضاء ناصعة
-val PaletteTextSecondaryDark = Color(0xFF94A3B8)   // نصوص ثانوية رمادي فاتح ومريح
+val PaletteTextPrimaryDark = Color(0xFFE8EDF6)     // نصوص #e8edf6
+val PaletteTextSecondaryDark = Color(0xFF8EA0C2)   // ثانوية #8ea0c2
 val PaletteTextMutedDark = Color(0xFF64748B)
 
 // Functional Status Colors
-val PaletteSuccessGreen = Color(0xFF10B981)        // أخضر للاتصال والنجاح والتوفير
-val PaletteDangerRed = Color(0xFFEF4444)           // أحمر للتحذير والخسارة والبيع
+val PaletteSuccessGreen = Color(0xFF2BD47D)        // أخضر للشراء #2bd47d
+val PaletteDangerRed = Color(0xFFFF5A6A)           // أحمر للبيع #ff5a6a
 val PaletteWarningAmber = Color(0xFFF59E0B)        // برتقالي كهرماني للتحذيرات
 
 // =========================================================================

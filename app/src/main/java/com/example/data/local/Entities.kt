@@ -55,3 +55,32 @@ data class MarketSettingsAuditLogEntity(
     val newValues: String get() = newValue
 }
 
+@Entity(tableName = "price_snapshots")
+data class PriceSnapshotEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val sourceUpdatedAt: Long = 0L,
+    val sourceUpdatedIso: String = "",
+    val ounceBuyUsd: Double = 0.0,
+    val ounceSellUsd: Double = 0.0,
+    val dollarBuyEgp: Double = 0.0,
+    val dollarSellEgp: Double = 0.0,
+    val saghaDollarBuyEgp: Double = 0.0,
+    val buy24: Double = 0.0,
+    val sell24: Double = 0.0,
+    val buy22: Double = 0.0,
+    val sell22: Double = 0.0,
+    val buy21: Double = 0.0,
+    val sell21: Double = 0.0,
+    val buy18: Double = 0.0,
+    val sell18: Double = 0.0,
+    val buy14: Double = 0.0,
+    val sell14: Double = 0.0,
+    val goldPoundBuy: Double = 0.0,
+    val goldPoundSell: Double = 0.0,
+    val status: String = "SUCCESS",
+    val feedLatencyMs: Long = 0L,
+    val diagnosticsJson: String = ""
+)
+

@@ -22,7 +22,7 @@ class PrimaryGoldPriceProvider(
             k21 = response.gram21,
             k18 = response.gram18,
             k14 = response.gram14,
-            source = response.source.ifEmpty { "GoldAPI.io" },
+            source = response.source.ifEmpty { "المصدر الرسمي المعتمد" },
             updatedAt = response.timestamp,
             isLive = response.status == "live" || response.status == "unchanged",
             errorMessage = response.error
