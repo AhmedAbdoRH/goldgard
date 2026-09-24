@@ -3,10 +3,6 @@ package com.example.data.remote.provider
 import com.example.model.GoldPriceResponse
 import com.example.model.PricePair
 
-/**
- * Adapter that bridges GoldAPIProvider to IGoldPriceProvider interface.
- * Serves as the Primary Provider.
- */
 class PrimaryGoldPriceProvider(
     private val goldAPIProvider: GoldPriceProvider
 ) : IGoldPriceProvider {
@@ -22,7 +18,7 @@ class PrimaryGoldPriceProvider(
             k21 = response.gram21,
             k18 = response.gram18,
             k14 = response.gram14,
-            source = response.source.ifEmpty { "GoldAPI.io" },
+            source = response.source.ifEmpty { "المصدر الرسمي المعتمد" },
             updatedAt = response.timestamp,
             isLive = response.status == "live" || response.status == "unchanged",
             errorMessage = response.error
@@ -30,10 +26,6 @@ class PrimaryGoldPriceProvider(
     }
 }
 
-/**
- * Backup / Secondary Provider that calculates validated market reference prices
- * from reliable spot benchmark formulas or local settings when the primary fails or times out.
- */
 class BackupGoldPriceProvider(
     private val secondaryProvider: GoldPriceProvider? = null,
     private val benchmark21Buy: Double = 6325.0,
@@ -62,7 +54,6 @@ class BackupGoldPriceProvider(
             } catch (_: Exception) {}
         }
 
-        // Benchmark calculation
         val p21Buy = benchmark21Buy
         val p21Sell = benchmark21Sell
         val p24Buy = p21Buy * 24.0 / 21.0
