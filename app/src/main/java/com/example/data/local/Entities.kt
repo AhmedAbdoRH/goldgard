@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val type: String,
+    val type: String, // "BUY" or "SELL"
     val karat: Int,
     val weight: Double,
     val pricePerGram: Double,
@@ -20,9 +20,9 @@ data class TransactionEntity(
     val priceDifference: Double = 0.0,
     val timestamp: Long = System.currentTimeMillis(),
     val formattedDate: String = "",
-    val note: String = "",
+    val note: String = "", // وصف العملية (مثل: شبكة، سبيكة)
     val receiptId: String = "",
-    val shopName: String = "",
+    val shopName: String = "", // اسم المحل
     val referenceGramPrice: Double = 0.0,
     val referenceRawPrice: Double = 0.0,
     val marketFactor: Double = 1.0,
