@@ -37,11 +37,11 @@ object GoldBullionPricingEngine {
     const val BUY_FACTOR = 1.0019
     const val SELL_FACTOR = 0.9972
     const val DEFAULT_K = 0.9996
-    const val DEFAULT_SD = 51.60
-    const val DEFAULT_USD_BUY = 51.55
-    const val DEFAULT_USD_SELL = 51.45
-    const val DEFAULT_OUNCE_ASK = 4285.46
-    const val DEFAULT_OUNCE_BID = 4284.96
+    const val DEFAULT_SD = 51.70
+    const val DEFAULT_USD_BUY = 51.85
+    const val DEFAULT_USD_SELL = 51.75
+    const val DEFAULT_OUNCE_ASK = 4285.45
+    const val DEFAULT_OUNCE_BID = 4284.95
 
     data class CalculatedPrices(
         val xau: Double,

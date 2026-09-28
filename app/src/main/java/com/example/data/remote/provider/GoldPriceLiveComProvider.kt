@@ -36,18 +36,18 @@ class GoldPriceLiveComProvider(
         .build()
 
     // Default benchmark prices directly verified from gold-price-live.com
-    private var currentBuy21: Double = 6265.0
-    private var currentSell21: Double = 6235.0
-    private var currentBuy24: Double = 7160.0
-    private var currentSell24: Double = 7126.0
-    private var currentBuy18: Double = 5370.0
-    private var currentSell18: Double = 5344.0
-    private var currentBuy22: Double = 6563.0
-    private var currentSell22: Double = 6532.0
-    private var currentBuy12: Double = 3580.0
-    private var currentSell12: Double = 3563.0
-    private var currentPoundBuy: Double = 50120.0
-    private var currentPoundSell: Double = 49880.0
+    private var currentBuy21: Double = 6080.0
+    private var currentSell21: Double = 6051.0
+    private var currentBuy24: Double = 6949.0
+    private var currentSell24: Double = 6915.0
+    private var currentBuy18: Double = 5212.0
+    private var currentSell18: Double = 5185.0
+    private var currentBuy22: Double = 6370.0
+    private var currentSell22: Double = 6339.0
+    private var currentBuy12: Double = 3474.0
+    private var currentSell12: Double = 3457.0
+    private var currentPoundBuy: Double = 48640.0
+    private var currentPoundSell: Double = 48408.0
 
     private var lastSuccessfulResponse: GoldPriceResponse? = null
     private var lastFetchTimestamp: Long = 0L
@@ -251,6 +251,18 @@ class GoldPriceLiveComProvider(
             gram21 = p21,
             gram18 = p18,
             gram14 = p14,
+            spread = com.example.model.KaratSpread(
+                k24 = (p24.buy - p24.sell).coerceAtLeast(0.0),
+                k22 = (p22.buy - p22.sell).coerceAtLeast(0.0),
+                k21 = (p21.buy - p21.sell).coerceAtLeast(0.0),
+                k18 = (p18.buy - p18.sell).coerceAtLeast(0.0),
+                k14 = (p14.buy - p14.sell).coerceAtLeast(0.0)
+            ),
+            goldPoundPrice = pPound,
+            saghaUsdRate = 51.70,
+            usdBuyRate = 51.85,
+            usdSellRate = 51.75,
+            usdToEgpRate = 51.85,
             timestamp = now,
             lastUpdated = timeStr,
             datetime = timeStr,

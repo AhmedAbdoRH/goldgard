@@ -151,7 +151,7 @@ class GoldViewModel(application: Application) : AndroidViewModel(application) {
     val isPriceFlashing: StateFlow<Boolean> = _isPriceFlashing.asStateFlow()
 
     // Calibration input (Local 21 Sell Benchmark)
-    val calibration21Input = MutableStateFlow("6235")
+    val calibration21Input = MutableStateFlow("6230")
 
     // Sadaqah Calculator State
     val sadaqahCashInput = MutableStateFlow("1000")

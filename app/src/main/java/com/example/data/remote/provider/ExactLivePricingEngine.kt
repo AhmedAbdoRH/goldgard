@@ -14,20 +14,26 @@ import java.util.concurrent.TimeUnit
 
 /**
  * محرك التسعير الرياضي اللحظي المعتمد:
- * 1. مصدر وحيد لتسعير الذهب: GET https://api.gold-api.com/price/XAU
- * 2. مصدر وحيد لسعر صرف الدولار (للعرض فقط): GET https://open.er-api.com/v6/latest/USD
- * 3. الثوابت الصارمة:
+ * 1. المصدر الأساسي لتسعير الذهب: GET https://data-asg.goldprice.org/dbXRates/USD
+ * 2. المصدر الاحتياطي (بعد 3 إخفاقات متتالية للمصدر الأساسي): GET https://api.gold-api.com/price/XAU
+ * 3. مصدر سعر صرف الدولار: GET https://open.er-api.com/v6/latest/USD
+ * 4. الثوابت الصارمة والمعايير:
  *    - وحدة الأونصة: 31.1035 جرام
- *    - دولار الصاغة: 51.3
- *    - معامل البيع: 0.9943
- *    - تقريب الشراء: لأقرب 10 جنيه صحيح بدون كسور (round(raw_k / 10) * 10)
- *    - تقريب البيع: round(raw_k * 0.9943)
+ *    - دولار الصاغة: SD = USD_EGP × admin_sd_factor (الافتراضي 1.0 أو 51.3)
+ *    - معامل البيع (kSellFactor): 0.9970 (أو 0.9943 للتوافق)
+ *    - التأكد الصارم: شراء > بيع في كل صف
  */
 object ExactLivePricingEngine {
 
     const val OUNCE_TO_GRAMS = 31.1035
     const val SAGHA_USD = 51.3
     const val SELL_FACTOR = 0.9943
+    const val DEFAULT_K_SELL_FACTOR = 0.9970
+
+    // معاملات قابلة للتعديل والتحكم
+    @Volatile var adminSdFactor: Double = 1.0
+    @Volatile var adminBuyFactor: Double = 1.0
+    @Volatile var kSellFactor: Double = 0.9970
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
@@ -37,6 +43,10 @@ object ExactLivePricingEngine {
     private const val PREFS_NAME = "exact_live_pricing_prefs"
     private const val KEY_USD_RATE = "cached_usd_official_rate"
     private const val KEY_USD_TIMESTAMP = "cached_usd_official_timestamp"
+
+    // تتبع الإخفاقات المتتالية للمصدر الأساسي
+    @Volatile
+    var primaryFailuresCount: Int = 0
 
     data class CalculatedPrices(
         val xauUsd: Double,
@@ -57,9 +67,61 @@ object ExactLivePricingEngine {
     )
 
     /**
-     * جلب سعر الأونصة من المصدر المعتمد حصراً بدون أي كاش
+     * جلب سعر الأونصة من المصدر الأساسي، أو الاحتياطي بعد 3 إخفاقات متتالية
      */
     suspend fun fetchLiveXau(): Pair<Double, String> = withContext(Dispatchers.IO) {
+        // 1. المحاولة مع المصدر الأساسي ما لم يكن قد أخفق 3 مرات متتالية
+        if (primaryFailuresCount < 3) {
+            try {
+                val primaryResult = fetchFromPrimaryGoldPrice()
+                primaryFailuresCount = 0 // إعادة ضبط عداد الإخفاق
+                return@withContext primaryResult
+            } catch (e: Exception) {
+                primaryFailuresCount++
+                Log.w("ExactLivePricing", "Primary goldprice.org failed (#$primaryFailuresCount): ${e.message}")
+            }
+        }
+
+        // 2. استخدام المصدر الاحتياطي (بعد 3 إخفاقات متتالية أو عند فشل الأساسي)
+        try {
+            val fallbackResult = fetchFromFallbackGoldApi()
+            return@withContext fallbackResult
+        } catch (e: Exception) {
+            Log.e("ExactLivePricing", "Fallback gold-api.com also failed: ${e.message}")
+            throw e
+        }
+    }
+
+    private fun fetchFromPrimaryGoldPrice(): Pair<Double, String> {
+        val request = Request.Builder()
+            .url("https://data-asg.goldprice.org/dbXRates/USD")
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .header("Origin", "https://goldprice.org")
+            .header("Referer", "https://goldprice.org/")
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Cache-Control", "no-cache")
+            .build()
+
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IllegalStateException("HTTP Error: ${response.code}")
+            }
+            val body = response.body?.string() ?: throw IllegalStateException("Empty response body")
+            val json = JSONObject(body)
+            val items = json.optJSONArray("items")
+            if (items != null && items.length() > 0) {
+                val item0 = items.getJSONObject(0)
+                val xau = item0.optDouble("xauPrice", 0.0)
+                val dateStr = json.optString("date", "")
+                if (xau > 0.0) {
+                    return Pair(xau, dateStr)
+                }
+            }
+            throw IllegalStateException("Invalid data in primary response")
+        }
+    }
+
+    private fun fetchFromFallbackGoldApi(): Pair<Double, String> {
         val request = Request.Builder()
             .url("https://api.gold-api.com/price/XAU")
             .header("Cache-Control", "no-cache")
@@ -75,7 +137,7 @@ object ExactLivePricingEngine {
             val json = JSONObject(body)
             val price = json.getDouble("price")
             val updatedAt = json.optString("updatedAt", "")
-            Pair(price, updatedAt)
+            return Pair(price, updatedAt)
         }
     }
 
@@ -128,8 +190,10 @@ object ExactLivePricingEngine {
      * تطبيق المعادلة الرياضية الدقيقة المستخرجة رياضياً
      */
     fun computePricing(xau: Double, updatedAtIso: String, officialUsdRate: Double): CalculatedPrices {
+        // SD = officialUsdRate * adminSdFactor
+        val effectiveSd = if (adminSdFactor > 0.0 && officialUsdRate > 0.0) officialUsdRate * adminSdFactor else SAGHA_USD
         // raw24 = ( XAU × SD ) ÷ 31.1035
-        val raw24 = (xau * SAGHA_USD) / OUNCE_TO_GRAMS
+        val raw24 = (xau * effectiveSd) / OUNCE_TO_GRAMS
         return computePricingFromRaw24(raw24, xau, updatedAtIso, officialUsdRate)
     }
 
@@ -149,7 +213,7 @@ object ExactLivePricingEngine {
             // buy_k = round( raw_k ÷ 10 ) × 10
             val buyK = Math.round(rawK / 10.0) * 10L
 
-            // sell_k = round( raw_k × 0.9943 )
+            // sell_k = round( raw_k × SELL_FACTOR )
             val sellK = Math.round(rawK * SELL_FACTOR)
 
             // اشتراط جوهري: شراء > بيع في كل صف. إذا انكسر الشرط اطبع في الكونسول: console.error("BUG: buy <= sell") وامنع عرض البطاقة.
@@ -186,6 +250,8 @@ object ExactLivePricingEngine {
         val officialUsdBuyText = Math.round(officialUsdRate).toString()
         val officialUsdSellText = Math.round(officialUsdRate).toString()
 
+        val sdText = String.format(Locale.US, "%.1f", if (adminSdFactor > 0.0 && officialUsdRate > 0.0) officialUsdRate * adminSdFactor else SAGHA_USD)
+
         return CalculatedPrices(
             xauUsd = xau,
             updatedAtIso = updatedAtIso,
@@ -197,7 +263,8 @@ object ExactLivePricingEngine {
             ounceEgpSell = ounceEgpSell,
             ounceUsdRound = ounceUsdRound,
             officialUsdBuy = officialUsdBuyText,
-            officialUsdSell = officialUsdSellText
+            officialUsdSell = officialUsdSellText,
+            saghaUsdText = sdText
         )
     }
 }

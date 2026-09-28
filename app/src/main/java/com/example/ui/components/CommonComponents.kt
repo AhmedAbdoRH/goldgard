@@ -624,7 +624,7 @@ fun MarketPricesSection(
                         )
                     }
                     Text(
-                        text = "${String.format(java.util.Locale.US, "%.2f", if (goldPriceResponse.saghaUsdRate > 0) goldPriceResponse.saghaUsdRate else 51.40)} ج.م",
+                        text = "${String.format(java.util.Locale.US, "%.2f", if (goldPriceResponse.saghaUsdRate > 0) goldPriceResponse.saghaUsdRate else 51.70)} ج.م",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = GoldTheme.colors.goldPrimary,
@@ -720,11 +720,24 @@ fun GoldPriceTable(
                     throw AssertionError("خطأ في التسعير: سعر الشراء ($safeBuy) أقل من سعر البيع ($safeSell) لعيار $karat")
                 }
 
-                val gap = safeBuy - safeSell
+                val spreadValue = when (karat) {
+                    24 -> goldPriceResponse.spread.k24
+                    22 -> goldPriceResponse.spread.k22
+                    21 -> goldPriceResponse.spread.k21
+                    18 -> goldPriceResponse.spread.k18
+                    14 -> goldPriceResponse.spread.k14
+                    else -> 0.0
+                }
+                val gap = if (spreadValue > 0.0) spreadValue else (safeBuy - safeSell)
                 val mid = (safeBuy + safeSell) / 2.0
                 val gapPercent = if (mid > 0.0) (gap / mid) * 100.0 else 0.0
 
-                val gapText = "الفرق: ${com.example.util.GoldPriceFormatter.formatWithGrouping(gap)} ج (${String.format(java.util.Locale.US, "%.1f", gapPercent)}%)"
+                val formattedGap = if (gap % 1.0 == 0.0) {
+                    com.example.util.GoldPriceFormatter.formatWithGrouping(gap)
+                } else {
+                    String.format(java.util.Locale.US, "%.2f", gap)
+                }
+                val gapText = "الفرق: $formattedGap ج (${String.format(java.util.Locale.US, "%.1f", gapPercent)}%)"
 
                 GoldPriceRow(
                     label = "عيار $karat",
